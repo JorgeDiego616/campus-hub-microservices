@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # =========================================================================
+  # 1. CORE TRANSACCIONAL DOCUMENTAL: MONGODB
+  # =========================================================================
+  mongodb:
+    image: mongo:8.0
+    container_name: ulsa-mongodb          # antes: bda-mongodb
+    ports:
+      - "27018:27017"                            # antes: 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    volumes:
+      - ulsa_mongodb_data:/data/db         # antes: mongodb_data
+    networks:
+      - ulsa-network                       # antes: bda-network
+
+  # =========================================================================
+  # 2. CAPA DE VELOCIDAD, CACHÉ Y ESTADO: REDIS STACK
+  # =========================================================================
+  redis-stack:
+    image: redis/redis-stack:latest
+    container_name: ulsa-redis-stack       # antes: bda-redis-stack
+    ports:
+      - "6380:6379"                               # antes: 6379:6379
+      - "8002:8001"                               # antes: 8001:8001
+    environment:
+      REDIS_ARGS: "--requirepass password123"
+    volumes:
+      - ulsa_redis_data:/data              # antes: redis_data
+    networks:
+      - ulsa-network
+
+  # =========================================================================
+  # 3. CAPA DE AUTORIZACIÓN Y GRAFOS: NEO4J
+  # =========================================================================
+  neo4j:
+    image: neo4j:5.26
+    container_name: ulsa-neo4j             # antes: bda-neo4j
+    ports:
+      - "7475:7474"                               # antes: 7474:7474
+      - "7688:7687"                               # antes: 7687:7687
+    environment:
+      NEO4J_AUTH: "neo4j/password123"
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - ulsa_neo4j_data:/data
+      - ulsa_neo4j_import:/var/lib/neo4j/import
+      - ulsa_neo4j_plugins:/plugins
+    networks:
+      - ulsa-network
+
+  # =========================================================================
+  # 4. CAPA DE TELEMETRÍA INMUTABLE: SCYLLADB (CASSANDRA COMPATIBLE)
+  # =========================================================================
+  scylladb:
+    image: scylladb/scylla:5.4
+    container_name: ulsa-scylladb          # antes: bda-scylladb
+    ports:
+      - "9043:9042"                               # antes: 9042:9042
+      - "19043:19042"                              # antes: 19042:19042
+    command: --reactor-backend=epoll --developer-mode=1
+    volumes:
+      - ulsa_scylla_data:/var/lib/scylla
+    networks:
+      - ulsa-network
+
+  # =========================================================================
+  # 5. BROKER DE MENSAJERÍA ASÍNCRONA: RABBITMQ
+  # =========================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: ulsa-rabbitmq          # antes: bda-rabbitmq
+    ports:
+      - "5673:5672"                               # antes: 5672:5672
+      - "15673:15672"                              # antes: 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - ulsa_rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - ulsa-network
+
+networks:
+  ulsa-network:
+    driver: bridge
+
+volumes:
+  ulsa_mongodb_data:
+  ulsa_redis_data:
+  ulsa_neo4j_data:
+  ulsa_neo4j_import:
+  ulsa_neo4j_plugins:
+  ulsa_scylla_data:
+  ulsa_rabbitmq_data:
