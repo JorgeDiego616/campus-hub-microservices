@@ -1,0 +1,26 @@
+# Dependencias (cada microservicio genera la suya, no se suben a Git)
+node_modules/
+
+# Variables de entorno y secretos (contraseñas, JWT_SECRET, URIs de conexión)
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Build/dist si en algún momento se compila algo
+dist/
+build/
