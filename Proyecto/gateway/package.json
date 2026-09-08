@@ -1,7 +1,7 @@
 {
-  "name": "mapa-service",
+  "name": "gateway",
   "version": "1.0.0",
-  "description": "Microservicio de espacios físicos de Campus Hub",
+  "description": "API Gateway federado de Campus Hub",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -12,11 +12,9 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@apollo/gateway": "^2.14.4",
     "@apollo/server": "^5.5.1",
-    "@apollo/subgraph": "^2.15.0",
-    "amqplib": "^2.0.1",
     "dotenv": "^17.4.2",
-    "graphql": "^16.14.2",
-    "mongoose": "^9.9.5"
+    "graphql": "^16.14.2"
   }
 }
