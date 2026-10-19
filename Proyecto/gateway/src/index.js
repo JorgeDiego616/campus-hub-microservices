@@ -4,8 +4,17 @@ import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import {
   ApolloGateway,
-  IntrospectAndCompose
+  IntrospectAndCompose,
+  RemoteGraphQLDataSource
 } from '@apollo/gateway';
+
+class AuthDataSource extends RemoteGraphQLDataSource {
+  willSendRequest({ request, context }) {
+    if (context?.authorization) {
+      request.http.headers.set('authorization', context.authorization);
+    }
+  }
+}
 
 const gateway = new ApolloGateway({
   supergraphSdl: new IntrospectAndCompose({
@@ -27,7 +36,10 @@ const gateway = new ApolloGateway({
         url: process.env.MAPA_URL || 'http://localhost:4002/'
       }
     ]
-  })
+  }),
+  buildService({ url }) {
+    return new AuthDataSource({ url });
+  }
 });
 
 const server = new ApolloServer({
@@ -42,7 +54,10 @@ const port = Number.parseInt(
 const { url } = await startStandaloneServer(server, {
   listen: {
     port
-  }
+  },
+  context: async ({ req }) => ({
+    authorization: req.headers.authorization || ''
+  })
 });
 
 console.log(
