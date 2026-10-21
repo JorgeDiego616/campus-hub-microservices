@@ -32,7 +32,7 @@ cd Proyecto/gateway && npm start
 ### 1. Crear usuarios
 ```graphql
 # ALUMNO
-mutation { registrarUsuario(matricula:"2024001", nombre:"Juan", email:"juan@test.com", password:"123456", rol:"ALUMNO") { id } }
+mutation { registrarUsuario(matricula:"2024001", nombre:"Juan", email:"juan@test.com", password:"123456", rol:"ESTUDIANTE") { id } }
 
 # ADMIN
 mutation { registrarUsuario(matricula:"ADMIN001", nombre:"Admin", email:"admin@test.com", password:"123456", rol:"ADMIN") { id } }
@@ -129,6 +129,6 @@ HORARIO_TTL_SECONDS=3600  # 1 hora
 ## Verificar en Redis CLI
 ```bash
 docker exec -it ulsa-redis-stack redis-cli -a password123
-> KEYS horario:*
+> SCAN 0 MATCH horario:* COUNT 100
 > GET "horario:estudiante:<ALU_ID>:<PER_ID>"
 ```
