@@ -1,12 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const ALLOWED_ROLES = new Set([
-  'ESTUDIANTE',
-  'ENTRENADOR',
-  'PROFESOR',
-  'ADMIN',
-  'BECARIO'
-]);
+const ROLE_PATTERN = /^[A-ZÁÉÍÓÚÑ0-9_]{3,30}$/;
 
 export function requireJwtSecret(value) {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -40,7 +34,9 @@ export function authenticateAuthorizationHeader(authorization, jwtSecret) {
       typeof payload.id !== 'string' ||
       payload.id.length === 0 ||
       typeof payload.rol !== 'string' ||
-      !ALLOWED_ROLES.has(payload.rol)
+      !ROLE_PATTERN.test(payload.rol) ||
+      typeof payload.jti !== 'string' ||
+      payload.jti.length === 0
     ) {
       return { actor: null, token: null };
     }
@@ -50,11 +46,32 @@ export function authenticateAuthorizationHeader(authorization, jwtSecret) {
         id: payload.id,
         rol: payload.rol
       },
-      token
+      token,
+      jti: payload.jti
     };
   } catch {
     return { actor: null, token: null };
   }
+}
+
+export async function authenticateActiveSession(
+  authorization,
+  jwtSecret,
+  sessionStore
+) {
+  const authentication = authenticateAuthorizationHeader(
+    authorization,
+    jwtSecret
+  );
+
+  if (!authentication.actor) return authentication;
+
+  const isActive = await sessionStore.hasMatchingSession({
+    jti: authentication.jti,
+    actor: authentication.actor
+  });
+
+  return isActive ? authentication : { actor: null, token: null, jti: null };
 }
 
 export function applyAuthenticatedHeaders(headers, authentication) {

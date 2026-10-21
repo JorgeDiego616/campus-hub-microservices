@@ -9,11 +9,22 @@ import {
 } from '@apollo/gateway';
 import {
   applyAuthenticatedHeaders,
-  authenticateAuthorizationHeader,
+  authenticateActiveSession,
   requireJwtSecret
 } from './authentication.js';
+import { createRedisSessionStore } from './redis-session-store.js';
 
 const jwtSecret = requireJwtSecret(process.env.JWT_SECRET);
+const redisUrl = process.env.REDIS_URL;
+
+if (typeof redisUrl !== 'string' || redisUrl.trim().length === 0) {
+  throw new Error(
+    'REDIS_URL es obligatorio en Gateway para validar sesiones JWT activas.'
+  );
+}
+
+const sessionStore = createRedisSessionStore(redisUrl);
+await sessionStore.connect();
 
 const gateway = new ApolloGateway({
   supergraphSdl: new IntrospectAndCompose({
@@ -71,9 +82,10 @@ const { url } = await startStandaloneServer(server, {
     port
   },
   context: async ({ req }) => ({
-    authentication: authenticateAuthorizationHeader(
+    authentication: await authenticateActiveSession(
       req.headers.authorization,
-      jwtSecret
+      jwtSecret,
+      sessionStore
     )
   })
 });
