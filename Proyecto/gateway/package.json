@@ -4,7 +4,7 @@
   "description": "API Gateway federado de Campus Hub",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/authentication.test.js",
     "start": "node src/index.js"
   },
   "keywords": [],
@@ -15,6 +15,7 @@
     "@apollo/gateway": "^2.14.4",
     "@apollo/server": "^5.5.1",
     "dotenv": "^17.4.2",
-    "graphql": "^16.14.2"
+    "graphql": "^16.14.2",
+    "jsonwebtoken": "^9.0.3"
   }
 }
