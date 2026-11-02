@@ -14,47 +14,47 @@ import {
 } from './authentication.js';
 import { createRedisSessionStore } from './redis-session-store.js';
 
-const jwtSecret = requireJwtSecret(process.env.JWT_SECRET);
-const redisUrl = process.env.REDIS_URL;
+const jwtSecret = requireJwtSecret(process.env.JWT_SECRET);  // lee el JWT_SECRET
+const redisUrl = process.env.REDIS_URL;  // lee el REDIS_URL
 
 if (typeof redisUrl !== 'string' || redisUrl.trim().length === 0) {
   throw new Error(
     'REDIS_URL es obligatorio en Gateway para validar sesiones JWT activas.'
   );
-}
+}  // valida que REDIS_URL esté presente y no sea vacío
 
-const sessionStore = createRedisSessionStore(redisUrl);
-await sessionStore.connect();
+const sessionStore = createRedisSessionStore(redisUrl);  // crea un store de sesiones en Redis
+await sessionStore.connect(); // conecta al store de sesiones en Redis
 
-const gateway = new ApolloGateway({
+const gateway = new ApolloGateway({  // crea un gateway de Apollo
   supergraphSdl: new IntrospectAndCompose({
-    subgraphs: [
+    subgraphs: [ // Manda llamar a los servicios de seguridad, academico, deportes, mapa y auditoria
       {
         name: 'seguridad',
-        url: process.env.SEGURIDAD_URL || 'http://localhost:4005/'
+        url: process.env.SEGURIDAD_URL || 'http://localhost:4005/' // sino está definido seguridad, usa localhost:4005
       },
       {
         name: 'academico',
-        url: process.env.ACADEMICO_URL || 'http://localhost:4004/'
+        url: process.env.ACADEMICO_URL || 'http://localhost:4004/' // sino está definido academico, usa localhost:4004
       },
       {
         name: 'deportes',
-        url: process.env.DEPORTES_URL || 'http://localhost:4001/'
+        url: process.env.DEPORTES_URL || 'http://localhost:4001/' // sino está definido deportes, usa localhost:4001
       },
       {
         name: 'mapa',
-        url: process.env.MAPA_URL || 'http://localhost:4002/'
+        url: process.env.MAPA_URL || 'http://localhost:4002/' // sino está definido mapa, usa localhost:4002
       },
       {
         name: 'auditoria',
-        url: process.env.AUDITORIA_URL || 'http://localhost:4003/'
+        url: process.env.AUDITORIA_URL || 'http://localhost:4003/' // sino está definido auditoria, usa localhost:4003
       }
     ]
   }),
   buildService({ url }) {
     return new RemoteGraphQLDataSource({
       url,
-      willSendRequest({ request, context }) {
+      willSendRequest({ request, context }) { // agrega los headers de autenticación a cada request que se envía a los subservicios
         applyAuthenticatedHeaders(
           request.http.headers,
           context?.authentication
