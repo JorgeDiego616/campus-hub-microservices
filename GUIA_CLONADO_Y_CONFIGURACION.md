@@ -249,81 +249,39 @@ JWT_SECRET=<mismo secreto>
 
 ---
 
-## 7. Paso 5 — Sembrar el grafo de roles en Neo4j
+## 7. Paso 5 — Sembrar el modelo RBAC en Neo4j
 
-Los roles de MongoDB se crean solos al arrancar `seguridad-service`. El grafo de jerarquía en Neo4j **sí** hay que sembrarlo (por ahora de forma manual).
+Al arrancar `seguridad-service` se siembran automáticamente las constraints, los 5 roles, la jerarquía `INHERITS`, las rutas con `CAN_ACCESS`, el menú (`MenuNode`, `HAS_CHILD`, `NAVIGATES_TO`, `CAN_VIEW_MENU`) y los usuarios de MongoDB con `HAS_ROLE`. No hace falta ejecutar Cypher a mano.
 
-Entra al cliente de Neo4j:
+Si necesitas recrear el grafo desde cero (o probar sin MongoDB), usa el script idempotente:
+
+```powershell
+docker cp init-rbac.cql ulsa-neo4j:/tmp/init-rbac.cql
+docker exec ulsa-neo4j cypher-shell -u neo4j -p password123 -f /tmp/init-rbac.cql
+```
+
+El script crea además 5 usuarios demo (`demo-admin`, `demo-profesor`, `demo-entrenador`, `demo-estudiante`, `demo-becario`) marcados con `demo: true`.
+
+### 7.1 Verificar el grafo
+
+Abre `http://localhost:7475` o usa `cypher-shell`:
 
 ```powershell
 docker exec -it ulsa-neo4j cypher-shell -u neo4j -p password123
 ```
 
-O abre `http://localhost:7475` y usa el navegador.
-
-### 7.1 Restricción de unicidad
-
-```cypher
-CREATE CONSTRAINT role_nombre_unique IF NOT EXISTS
-FOR (r:Role) REQUIRE r.nombre IS UNIQUE;
-```
-
-### 7.2 Crear roles
-
-```cypher
-MERGE (admin:Role {nombre: 'ADMIN'})
-SET admin.descripcion = 'Administrador del campus', admin.nivel = 1, admin.activo = true;
-
-MERGE (prof:Role {nombre: 'PROFESOR'})
-SET prof.descripcion = 'Docente', prof.nivel = 2, prof.activo = true;
-
-MERGE (ent:Role {nombre: 'ENTRENADOR'})
-SET ent.descripcion = 'Entrenador deportivo', ent.nivel = 2, ent.activo = true;
-
-MERGE (bec:Role {nombre: 'BECARIO'})
-SET bec.descripcion = 'Alumno con beca', bec.nivel = 3, bec.activo = true;
-
-MERGE (est:Role {nombre: 'ESTUDIANTE'})
-SET est.descripcion = 'Alumno regular', est.nivel = 3, est.activo = true;
-```
-
-### 7.3 Crear herencias
-
-```cypher
-MATCH (admin:Role {nombre: 'ADMIN'})
-MATCH (prof:Role {nombre: 'PROFESOR'})
-MERGE (admin)-[:INHERITS]->(prof);
-
-MATCH (admin:Role {nombre: 'ADMIN'})
-MATCH (ent:Role {nombre: 'ENTRENADOR'})
-MERGE (admin)-[:INHERITS]->(ent);
-
-MATCH (prof:Role {nombre: 'PROFESOR'})
-MATCH (est:Role {nombre: 'ESTUDIANTE'})
-MERGE (prof)-[:INHERITS]->(est);
-
-MATCH (ent:Role {nombre: 'ENTRENADOR'})
-MATCH (est:Role {nombre: 'ESTUDIANTE'})
-MERGE (ent)-[:INHERITS]->(est);
-
-MATCH (bec:Role {nombre: 'BECARIO'})
-MATCH (est:Role {nombre: 'ESTUDIANTE'})
-MERGE (bec)-[:INHERITS]->(est);
-```
-
-### 7.4 Verificar
-
 ```cypher
 MATCH (h:Role)-[:INHERITS]->(p:Role)
-RETURN h.nombre AS hereda, p.nombre AS de
+RETURN h.name AS hereda, p.name AS de
 ORDER BY hereda, de;
+
+MATCH (u:User)-[:HAS_ROLE]->(r:Role)
+RETURN count(*) AS usuariosConRol;
+
+MATCH (m:MenuNode) RETURN count(m) AS menus;
 ```
 
-Deben aparecer 5 relaciones. Sal del cliente con:
-
-```cypher
-:exit
-```
+Deben aparecer 5 relaciones `INHERITS`, los usuarios sincronizados y 8 nodos de menú. Sal con `:exit`.
 
 ---
 
@@ -503,7 +461,7 @@ docker compose down
 - [ ] `npm install` ejecutado en gateway + 5 servicios.
 - [ ] `.env` creado en gateway + 5 servicios.
 - [ ] Mismo `JWT_SECRET` en los 6 `.env`.
-- [ ] Grafo de roles sembrado en Neo4j (5 nodos + 5 relaciones).
+- [ ] Modelo RBAC sembrado en Neo4j (5 roles, 16 rutas, 8 menús, usuarios con `HAS_ROLE`).
 - [ ] Servicios escuchando en 4000–4005.
 - [ ] `roles` responde desde el Gateway.
 - [ ] `registrarUsuario` + `login` funcionan.
