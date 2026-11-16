@@ -14,6 +14,7 @@ UNWIND [
   {name: 'ADMIN', level: 1, description: 'Administrador del campus'},
   {name: 'PROFESOR', level: 2, description: 'Docente'},
   {name: 'ENTRENADOR', level: 2, description: 'Entrenador deportivo'},
+  {name: 'COORDINADOR', level: 2, description: 'Coordinador de actividades'},
   {name: 'BECARIO', level: 3, description: 'Alumno con beca'},
   {name: 'ESTUDIANTE', level: 3, description: 'Alumno regular'}
 ] AS role
@@ -24,8 +25,10 @@ SET r.level = role.level, r.description = role.description;
 UNWIND [
   {superior: 'ADMIN', inferior: 'PROFESOR'},
   {superior: 'ADMIN', inferior: 'ENTRENADOR'},
+  {superior: 'ADMIN', inferior: 'COORDINADOR'},
   {superior: 'PROFESOR', inferior: 'ESTUDIANTE'},
   {superior: 'ENTRENADOR', inferior: 'ESTUDIANTE'},
+  {superior: 'COORDINADOR', inferior: 'ESTUDIANTE'},
   {superior: 'BECARIO', inferior: 'ESTUDIANTE'}
 ] AS link
 MATCH (superior:Role {name: link.superior})
@@ -69,44 +72,37 @@ UNWIND [
   {role: 'ESTUDIANTE', path: 'event_detail/{id}'},
   {role: 'ESTUDIANTE', path: 'registration_screen/{eventId}'},
   {role: 'ENTRENADOR', path: 'qr_screen'},
-  {role: 'PROFESOR', path: 'qr_screen'}
+  {role: 'PROFESOR', path: 'qr_screen'},
+  {role: 'COORDINADOR', path: 'qr_screen'}
 ] AS access
 MATCH (r:Role {name: access.role})
 MATCH (rt:Route {path: access.path})
 MERGE (r)-[:CAN_ACCESS]->(rt);
 
-// 4) Nodos de menu
+// 4) Nodos de menu (se limpian para no arrastrar nodos viejos como 'root')
+MATCH (m:MenuNode) DETACH DELETE m;
+
 UNWIND [
-  {id: 'root', title: 'Menú principal', order: 0},
-  {id: 'teams', title: 'Equipos', order: 1},
-  {id: 'home', title: 'Inicio', order: 2},
+  {id: 'home', title: 'Inicio', order: 1},
+  {id: 'teams', title: 'Equipos', order: 2},
   {id: 'news', title: 'Noticias', order: 3},
   {id: 'matches', title: 'Partidos', order: 4},
   {id: 'management', title: 'Gestión', order: 5},
-  {id: 'qr', title: 'Crear evento / QR', order: 1},
-  {id: 'profile', title: 'Perfil', order: 6}
+  {id: 'profile', title: 'Perfil', order: 6},
+  {id: 'qr', title: 'Crear evento / QR', order: 1}
 ] AS menu
 MERGE (m:MenuNode {id: menu.id})
 SET m.title = menu.title, m.order = menu.order;
 
-// 4.1) Jerarquia del menu
-UNWIND [
-  {parent: 'root', child: 'teams'},
-  {parent: 'root', child: 'home'},
-  {parent: 'root', child: 'news'},
-  {parent: 'root', child: 'matches'},
-  {parent: 'root', child: 'management'},
-  {parent: 'root', child: 'profile'},
-  {parent: 'management', child: 'qr'}
-] AS link
-MATCH (parent:MenuNode {id: link.parent})
-MATCH (child:MenuNode {id: link.child})
-MERGE (parent)-[:HAS_CHILD]->(child);
+// 4.1) Jerarquia del menu: management es padre de qr
+MATCH (p:MenuNode {id: 'management'})
+MATCH (c:MenuNode {id: 'qr'})
+MERGE (p)-[:HAS_CHILD]->(c);
 
-// 4.2) Navegacion del menu hacia las rutas
+// 4.2) Navegacion del menu hacia las rutas (management es solo contenedor)
 UNWIND [
-  {menu: 'teams', path: 'team_section'},
   {menu: 'home', path: 'home_home'},
+  {menu: 'teams', path: 'team_section'},
   {menu: 'news', path: 'news_section'},
   {menu: 'matches', path: 'matches_section'},
   {menu: 'profile', path: 'profile_section'},
@@ -118,16 +114,17 @@ MERGE (m)-[:NAVIGATES_TO]->(rt);
 
 // 4.3) Visibilidad del menu por rol
 UNWIND [
-  {role: 'ESTUDIANTE', menu: 'root'},
-  {role: 'ESTUDIANTE', menu: 'teams'},
   {role: 'ESTUDIANTE', menu: 'home'},
+  {role: 'ESTUDIANTE', menu: 'teams'},
   {role: 'ESTUDIANTE', menu: 'news'},
   {role: 'ESTUDIANTE', menu: 'matches'},
   {role: 'ESTUDIANTE', menu: 'profile'},
   {role: 'PROFESOR', menu: 'management'},
   {role: 'PROFESOR', menu: 'qr'},
   {role: 'ENTRENADOR', menu: 'management'},
-  {role: 'ENTRENADOR', menu: 'qr'}
+  {role: 'ENTRENADOR', menu: 'qr'},
+  {role: 'COORDINADOR', menu: 'management'},
+  {role: 'COORDINADOR', menu: 'qr'}
 ] AS view
 MATCH (r:Role {name: view.role})
 MATCH (m:MenuNode {id: view.menu})
@@ -142,6 +139,7 @@ UNWIND [
   {id: 'demo-admin', role: 'ADMIN'},
   {id: 'demo-profesor', role: 'PROFESOR'},
   {id: 'demo-entrenador', role: 'ENTRENADOR'},
+  {id: 'demo-coordinador', role: 'COORDINADOR'},
   {id: 'demo-estudiante', role: 'ESTUDIANTE'},
   {id: 'demo-becario', role: 'BECARIO'}
 ] AS demo
@@ -152,8 +150,13 @@ MATCH (r:Role {name: demo.role})
 MERGE (u)-[:HAS_ROLE]->(r);
 
 // Usuario real (opcional):
-// MERGE (u:User {id: $userId})
-// WITH u MATCH (r:Role {name: $role})
+// UNWIND [
+//   {id: 'ID_MONGO_1', role: 'PROFESOR'},
+//   {id: 'ID_MONGO_2', role: 'ESTUDIANTE'}
+// ] AS real
+// MERGE (u:User {id: real.id})
+// WITH u, real
+// MATCH (r:Role {name: real.role})
 // MERGE (u)-[:HAS_ROLE]->(r);
 
 // Limpieza de usuarios demo (opcional):

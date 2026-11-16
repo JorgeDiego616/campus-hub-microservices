@@ -38,13 +38,14 @@ La autorización se aplica en dos capas:
 
 ## 3. Catálogo de roles
 
-Se definen **cinco roles propios del dominio**:
+Se definen **seis roles**:
 
 | Rol | Nivel | Descripción |
 |---|---|---|
 | `ADMIN` | 1 | Administrador del campus |
 | `PROFESOR` | 2 | Docente |
 | `ENTRENADOR` | 2 | Entrenador deportivo |
+| `COORDINADOR` | 2 | Coordinador de actividades |
 | `BECARIO` | 3 | Alumno con beca |
 | `ESTUDIANTE` | 3 | Alumno regular |
 
@@ -63,6 +64,7 @@ ADMIN ──INHERITS──► PROFESOR
 ADMIN ──INHERITS──► ENTRENADOR
 PROFESOR ──INHERITS──► ESTUDIANTE
 ENTRENADOR ──INHERITS──► ESTUDIANTE
+COORDINADOR ──INHERITS──► ESTUDIANTE
 BECARIO ──INHERITS──► ESTUDIANTE
 ```
 
@@ -73,6 +75,7 @@ BECARIO ──INHERITS──► ESTUDIANTE
 | `ADMIN` | `PROFESOR`, `ENTRENADOR`, `ESTUDIANTE` |
 | `PROFESOR` | `ESTUDIANTE` |
 | `ENTRENADOR` | `ESTUDIANTE` |
+| `COORDINADOR` | `ESTUDIANTE` |
 | `BECARIO` | `ESTUDIANTE` |
 | `ESTUDIANTE` | — |
 
@@ -116,6 +119,7 @@ UNWIND [
   {name: 'ADMIN', level: 1, description: 'Administrador del campus'},
   {name: 'PROFESOR', level: 2, description: 'Docente'},
   {name: 'ENTRENADOR', level: 2, description: 'Entrenador deportivo'},
+  {name: 'COORDINADOR', level: 2, description: 'Coordinador de actividades'},
   {name: 'BECARIO', level: 3, description: 'Alumno con beca'},
   {name: 'ESTUDIANTE', level: 3, description: 'Alumno regular'}
 ] AS role
@@ -133,6 +137,7 @@ UNWIND [
   {superior: 'ADMIN', inferior: 'ENTRENADOR'},
   {superior: 'PROFESOR', inferior: 'ESTUDIANTE'},
   {superior: 'ENTRENADOR', inferior: 'ESTUDIANTE'},
+  {superior: 'COORDINADOR', inferior: 'ESTUDIANTE'},
   {superior: 'BECARIO', inferior: 'ESTUDIANTE'}
 ] AS link
 MATCH (superior:Role {name: link.superior})
@@ -145,7 +150,7 @@ MERGE (superior)-[:INHERITS]->(inferior);
 Se registran las 16 rutas reales de la app (incluye `tabs`, el contenedor de pestañas) y el acceso se asigna **solo al rol más bajo autorizado**:
 
 - `ESTUDIANTE` recibe las rutas base: home, equipos, noticias, partidos, perfil, API, detalles, registro de evento y `tabs`.
-- `PROFESOR` y `ENTRENADOR` reciben `qr_screen` por separado, porque son hermanos y no se heredan entre sí.
+- `PROFESOR`, `ENTRENADOR` y `COORDINADOR` reciben `qr_screen` por separado, porque son hermanos y no se heredan entre sí.
 - `ADMIN`, `BECARIO` y los demás roles obtienen el acceso por transitividad.
 - `onboarding`, `login` y `register` se marcan `public: true` y no llevan `CAN_ACCESS`.
 
@@ -163,7 +168,8 @@ UNWIND [
   {role: 'ESTUDIANTE', path: 'home_home'},
   {role: 'ESTUDIANTE', path: 'tabs'},
   {role: 'ENTRENADOR', path: 'qr_screen'},
-  {role: 'PROFESOR', path: 'qr_screen'}
+  {role: 'PROFESOR', path: 'qr_screen'},
+  {role: 'COORDINADOR', path: 'qr_screen'}
   // ... listado completo en init-rbac.cql
 ] AS access
 MATCH (r:Role {name: access.role})
@@ -215,7 +221,9 @@ MERGE (m)-[:NAVIGATES_TO]->(rt);
 UNWIND [
   {role: 'ESTUDIANTE', menu: 'root'},
   {role: 'PROFESOR', menu: 'management'},
-  {role: 'ENTRENADOR', menu: 'qr'}
+  {role: 'ENTRENADOR', menu: 'qr'},
+  {role: 'COORDINADOR', menu: 'management'},
+  {role: 'COORDINADOR', menu: 'qr'}
   // ... listado completo en init-rbac.cql
 ] AS view
 MATCH (r:Role {name: view.role})
@@ -225,7 +233,7 @@ MERGE (r)-[:CAN_VIEW_MENU]->(m);
 
 ### 5.6 Usuarios y `HAS_ROLE`
 
-Los usuarios viven en MongoDB; Neo4j solo guarda la proyección `(:User {id, role})` y su `HAS_ROLE`. La sincronización se hace al arrancar (`syncUsersToGraph`) y al registrar un usuario (`upsertUserGraph`). El script `init-rbac.cql` incluye además 5 usuarios demo (`demo-admin`, `demo-profesor`, etc.) marcados con `demo: true` para probar sin MongoDB.
+Los usuarios viven en MongoDB; Neo4j solo guarda la proyección `(:User {id, role})` y su `HAS_ROLE`. La sincronización se hace al arrancar (`syncUsersToGraph`) y al registrar un usuario (`upsertUserGraph`). El script `init-rbac.cql` incluye además 6 usuarios demo (`demo-admin`, `demo-profesor`, `demo-coordinador`, etc.) marcados con `demo: true` para probar sin MongoDB.
 
 ```cypher
 MATCH (u:User {id: $userId})-[old:HAS_ROLE]->(:Role)
@@ -272,7 +280,7 @@ RETURN r.name AS rol, collect(DISTINCT m.id) AS menus
 ORDER BY rol;
 ```
 
-Resultados esperados: `Route = 16`, `CAN_ACCESS = 14`, `MenuNode = 8`, `HAS_CHILD = 7`, `NAVIGATES_TO = 6`, `CAN_VIEW_MENU = 10`, `INHERITS = 5`, `0` ciclos. Rutas efectivas: `13` para `ADMIN/PROFESOR/ENTRENADOR` y `12` para `BECARIO/ESTUDIANTE`.
+Resultados esperados: `Role = 6`, `Route = 16`, `CAN_ACCESS = 15`, `MenuNode = 8`, `HAS_CHILD = 7`, `NAVIGATES_TO = 6`, `CAN_VIEW_MENU = 12`, `INHERITS = 6`, `0` ciclos. Rutas efectivas: `13` para `ADMIN/PROFESOR/ENTRENADOR/COORDINADOR` y `12` para `BECARIO/ESTUDIANTE`. Menús efectivos: `8` y `6` respectivamente.
 
 ### 5.9 `rbac.service.js` y GraphQL
 
@@ -483,13 +491,13 @@ Casos cubiertos:
 ### RBAC en Neo4j
 
 - `init-rbac.cql` ejecutado dos veces sin duplicados (idempotente).
-- Conteos: `Route = 16`, `CAN_ACCESS = 14`, `MenuNode = 8`, `HAS_CHILD = 7`, `NAVIGATES_TO = 6`, `CAN_VIEW_MENU = 10`, `INHERITS = 5`, `User = 17` (12 reales + 5 demo), `HAS_ROLE = 17`.
+- Conteos: `Role = 6`, `Route = 16`, `CAN_ACCESS = 15`, `MenuNode = 8`, `HAS_CHILD = 7`, `NAVIGATES_TO = 6`, `CAN_VIEW_MENU = 12`, `INHERITS = 6`, `User = 18` (12 reales + 6 demo), `HAS_ROLE = 18`.
 - Ciclos en `INHERITS`: `0`.
-- Rutas efectivas: `13` para `ADMIN/PROFESOR/ENTRENADOR` y `12` para `BECARIO/ESTUDIANTE`.
-- Menús efectivos: `8` para `ADMIN/PROFESOR/ENTRENADOR` y `6` para `BECARIO/ESTUDIANTE`; `qr` aparece anidado bajo `management` solo en los roles altos.
-- GraphQL E2E: `demo-estudiante` no ve `management`/`qr` y `qr_screen = false`; `demo-entrenador`, `demo-profesor` y `demo-admin` ven `management` con `qr` anidado y `qr_screen = true`.
+- Rutas efectivas: `13` para `ADMIN/PROFESOR/ENTRENADOR/COORDINADOR` y `12` para `BECARIO/ESTUDIANTE`.
+- Menús efectivos: `8` para `ADMIN/PROFESOR/ENTRENADOR/COORDINADOR` y `6` para `BECARIO/ESTUDIANTE`; `qr` aparece anidado bajo `management` solo en los roles altos.
+- GraphQL E2E: `demo-estudiante` no ve `management`/`qr` y `qr_screen = false`; `demo-entrenador`, `demo-profesor`, `demo-coordinador` y `demo-admin` ven `management` con `qr` anidado y `qr_screen = true`.
 - `node --check` en los módulos nuevos (`database.js`, `neo4j-users.js`, `rbac.service.js`, `index.js`).
-- Android: `:app:compileDebugKotlin` con `BUILD SUCCESSFUL`; se eliminaron 3 rutas muertas en la rama `fix/rutas-muertas-navegacion`.
+- Android: `:app:compileDebugKotlin` con `BUILD SUCCESSFUL`; menú dinámico conectado a `menuUsuario` (pestañas filtradas y botón de QR oculto sin acceso).
 
 Los pasos de prueba end-to-end están en `GUIA_CLONADO_Y_CONFIGURACION.md` (sección de pruebas).
 
@@ -500,11 +508,11 @@ Los pasos de prueba end-to-end están en `GUIA_CLONADO_Y_CONFIGURACION.md` (secc
 1. **Jerarquía duplicada en código:** `ROLE_INHERITANCE` es un espejo del grafo de Neo4j. Cuando el login calcule los roles efectivos y los guarde en la sesión, la constante dejará de usarse.
 2. **JWT con un solo rol:** actualmente el token lleva `{ id, rol, jti }`. Para aprovechar la herencia desde Neo4j, falta que el login resuelva el cierre transitivo y lo propague.
 3. **Acceso directo a subgrafos:** los subgrafos verifican la firma JWT, pero no consultan Redis. El Gateway sí bloquea tokens con sesión cerrada; una llamada directa al puerto con un JWT aún vigente pasaría.
-4. **Doble vía de siembra:** el arranque usa seeds JS y también existe `init-rbac.cql`; hay que mantener ambos sincronizados.
+4. **Doble vía de siembra:** el arranque usa seeds JS y también existe `init-rbac.cql`; hay que mantener ambos sincronizados (hoy ambos incluyen los 6 roles).
 5. **`ENTRENADOR`:** ya tiene permisos reales en Deportes; en Académico sigue sin reglas propias.
 6. **Caché de roles efectivos:** conviene cachear el cierre transitivo en Redis e invalidarlo al crear roles o relaciones.
-7. **Menú dinámico en Android:** la query `menuUsuario` ya existe, pero la app sigue usando los `TABS` estáticos.
+7. **Menú dinámico en Android (resuelto):** la app consume `menuUsuario`, filtra las pestañas y oculta el botón de QR cuando el rol no tiene `qr_screen`.
 8. **Consulta de menú adaptada:** `obtenerMenuUsuario` no es idéntica al snippet original; evalúa visibilidad por nodo y arma el árbol en JS para soportar submenús.
-9. **Federación:** falta probar `menuUsuario` y `validarAccesoRuta` a través del Gateway.
-10. **Roles personalizados:** `crearRol` solo crea el rol en MongoDB; en Neo4j se crea sin nivel ni herencia al sincronizar un usuario.
+9. **Federación:** `menuUsuario` y `validarAccesoRuta` se prueban a través del Gateway con los usuarios de MongoDB.
+10. **Roles personalizados:** `COORDINADOR` ya es parte del catálogo por defecto; `crearRol` sigue creando roles personalizados solo en MongoDB y en Neo4j se crean sin nivel ni herencia al sincronizar un usuario.
 11. **Usuarios huérfanos:** el sync no elimina nodos `User` cuando se borra el usuario en MongoDB.

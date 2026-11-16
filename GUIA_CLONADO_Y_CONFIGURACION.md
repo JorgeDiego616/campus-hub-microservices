@@ -251,7 +251,7 @@ JWT_SECRET=<mismo secreto>
 
 ## 7. Paso 5 — Sembrar el modelo RBAC en Neo4j
 
-Al arrancar `seguridad-service` se siembran automáticamente las constraints, los 5 roles, la jerarquía `INHERITS`, las rutas con `CAN_ACCESS`, el menú (`MenuNode`, `HAS_CHILD`, `NAVIGATES_TO`, `CAN_VIEW_MENU`) y los usuarios de MongoDB con `HAS_ROLE`. No hace falta ejecutar Cypher a mano.
+Al arrancar `seguridad-service` se siembran automáticamente las constraints, los 6 roles, la jerarquía `INHERITS`, las rutas con `CAN_ACCESS`, el menú (`MenuNode`, `HAS_CHILD`, `NAVIGATES_TO`, `CAN_VIEW_MENU`) y los usuarios de MongoDB con `HAS_ROLE`. No hace falta ejecutar Cypher a mano.
 
 Si necesitas recrear el grafo desde cero (o probar sin MongoDB), usa el script idempotente:
 
@@ -260,7 +260,7 @@ docker cp init-rbac.cql ulsa-neo4j:/tmp/init-rbac.cql
 docker exec ulsa-neo4j cypher-shell -u neo4j -p password123 -f /tmp/init-rbac.cql
 ```
 
-El script crea además 5 usuarios demo (`demo-admin`, `demo-profesor`, `demo-entrenador`, `demo-estudiante`, `demo-becario`) marcados con `demo: true`.
+El script crea además 6 usuarios demo (`demo-admin`, `demo-profesor`, `demo-entrenador`, `demo-coordinador`, `demo-estudiante`, `demo-becario`) marcados con `demo: true`.
 
 ### 7.1 Verificar el grafo
 
@@ -281,7 +281,7 @@ RETURN count(*) AS usuariosConRol;
 MATCH (m:MenuNode) RETURN count(m) AS menus;
 ```
 
-Deben aparecer 5 relaciones `INHERITS`, los usuarios sincronizados y 8 nodos de menú. Sal con `:exit`.
+Deben aparecer 6 relaciones `INHERITS`, los usuarios sincronizados y 8 nodos de menú. Sal con `:exit`.
 
 ---
 
@@ -461,7 +461,7 @@ docker compose down
 - [ ] `npm install` ejecutado en gateway + 5 servicios.
 - [ ] `.env` creado en gateway + 5 servicios.
 - [ ] Mismo `JWT_SECRET` en los 6 `.env`.
-- [ ] Modelo RBAC sembrado en Neo4j (5 roles, 16 rutas, 8 menús, usuarios con `HAS_ROLE`).
+- [ ] Modelo RBAC sembrado en Neo4j (6 roles, 16 rutas, 8 menús, usuarios con `HAS_ROLE`).
 - [ ] Servicios escuchando en 4000–4005.
 - [ ] `roles` responde desde el Gateway.
 - [ ] `registrarUsuario` + `login` funcionan.
