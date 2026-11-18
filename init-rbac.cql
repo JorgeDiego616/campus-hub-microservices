@@ -15,7 +15,7 @@ UNWIND [
   {name: 'PROFESOR', level: 2, description: 'Docente'},
   {name: 'ENTRENADOR', level: 2, description: 'Entrenador deportivo'},
   {name: 'COORDINADOR', level: 2, description: 'Coordinador de actividades'},
-  {name: 'BECARIO', level: 3, description: 'Alumno con beca'},
+  {name: 'BECARIO', level: 2, description: 'Coordinador de becas'},
   {name: 'ESTUDIANTE', level: 3, description: 'Alumno regular'}
 ] AS role
 MERGE (r:Role {name: role.name})
@@ -26,6 +26,7 @@ UNWIND [
   {superior: 'ADMIN', inferior: 'PROFESOR'},
   {superior: 'ADMIN', inferior: 'ENTRENADOR'},
   {superior: 'ADMIN', inferior: 'COORDINADOR'},
+  {superior: 'ADMIN', inferior: 'BECARIO'},
   {superior: 'PROFESOR', inferior: 'ESTUDIANTE'},
   {superior: 'ENTRENADOR', inferior: 'ESTUDIANTE'},
   {superior: 'COORDINADOR', inferior: 'ESTUDIANTE'},
@@ -73,7 +74,70 @@ UNWIND [
   {role: 'ESTUDIANTE', path: 'registration_screen/{eventId}'},
   {role: 'ENTRENADOR', path: 'qr_screen'},
   {role: 'PROFESOR', path: 'qr_screen'},
-  {role: 'COORDINADOR', path: 'qr_screen'}
+  {role: 'COORDINADOR', path: 'qr_screen'},
+  {role: 'BECARIO', path: 'qr_screen'}
+] AS access
+MATCH (r:Role {name: access.role})
+MATCH (rt:Route {path: access.path})
+MERGE (r)-[:CAN_ACCESS]->(rt);
+
+// 3.2) Mutaciones de GraphQL como rutas protegidas
+// Uso el prefijo 'gql:' para no mezclarlas con las pantallas de la app.
+// El Gateway revisa estas rutas antes de mandar la mutacion al subgrafo,
+// asi que si no hay camino HAS_ROLE -> INHERITS*0.. -> CAN_ACCESS, se bloquea
+// con 403 y nunca se escribe nada en MongoDB.
+UNWIND [
+  {path: 'gql:login', title: 'Iniciar sesión', public: true},
+  {path: 'gql:registrarUsuario', title: 'Registrar usuario', public: true},
+  {path: 'gql:logout', title: 'Cerrar sesión', public: true},
+  {path: 'gql:crearRol', title: 'Crear rol', public: false},
+  {path: 'gql:cambiarRolUsuario', title: 'Cambiar rol de usuario', public: false},
+  {path: 'gql:registrarEquipo', title: 'Registrar equipo', public: false},
+  {path: 'gql:registrarPractica', title: 'Registrar práctica', public: false},
+  {path: 'gql:crearEspacio', title: 'Crear espacio', public: false},
+  {path: 'gql:activarEspacio', title: 'Activar espacio', public: false},
+  {path: 'gql:desactivarEspacio', title: 'Desactivar espacio', public: false},
+  {path: 'gql:crearCarrera', title: 'Crear carrera', public: false},
+  {path: 'gql:crearMateria', title: 'Crear materia', public: false},
+  {path: 'gql:crearPeriodo', title: 'Crear periodo', public: false},
+  {path: 'gql:crearAsignacionMateria', title: 'Asignar materia', public: false},
+  {path: 'gql:crearSesionHorario', title: 'Crear sesión de horario', public: false},
+  {path: 'gql:actualizarSesionHorario', title: 'Actualizar sesión de horario', public: false},
+  {path: 'gql:eliminarSesionHorario', title: 'Eliminar sesión de horario', public: false},
+  {path: 'gql:registrarCalificacion', title: 'Registrar calificación', public: false},
+  {path: 'gql:registrarFalta', title: 'Registrar falta', public: false},
+  {path: 'gql:registrarExamen', title: 'Registrar examen', public: false},
+  {path: 'gql:inscribirAlumno', title: 'Inscribir alumno', public: false},
+  {path: 'gql:guardarPerfilAcademico', title: 'Guardar perfil académico', public: false},
+  {path: 'gql:registrarHorasComplementarias', title: 'Registrar horas complementarias', public: false},
+  {path: 'gql:registrarHorasBecarias', title: 'Registrar horas becarias', public: false}
+] AS op
+MERGE (rt:Route {path: op.path})
+SET rt.title = op.title, rt.public = op.public, rt.tipo = 'graphql';
+
+// 3.3) Permiso al rol mas bajo; los de arriba lo heredan solos
+UNWIND [
+  {role: 'ADMIN', path: 'gql:crearRol'},
+  {role: 'ADMIN', path: 'gql:cambiarRolUsuario'},
+  {role: 'ADMIN', path: 'gql:crearEspacio'},
+  {role: 'ADMIN', path: 'gql:activarEspacio'},
+  {role: 'ADMIN', path: 'gql:desactivarEspacio'},
+  {role: 'ADMIN', path: 'gql:crearCarrera'},
+  {role: 'ADMIN', path: 'gql:crearMateria'},
+  {role: 'ADMIN', path: 'gql:crearPeriodo'},
+  {role: 'ADMIN', path: 'gql:crearAsignacionMateria'},
+  {role: 'ADMIN', path: 'gql:crearSesionHorario'},
+  {role: 'ADMIN', path: 'gql:actualizarSesionHorario'},
+  {role: 'ADMIN', path: 'gql:eliminarSesionHorario'},
+  {role: 'ENTRENADOR', path: 'gql:registrarEquipo'},
+  {role: 'ENTRENADOR', path: 'gql:registrarPractica'},
+  {role: 'PROFESOR', path: 'gql:registrarCalificacion'},
+  {role: 'PROFESOR', path: 'gql:registrarFalta'},
+  {role: 'PROFESOR', path: 'gql:registrarExamen'},
+  {role: 'ESTUDIANTE', path: 'gql:inscribirAlumno'},
+  {role: 'ESTUDIANTE', path: 'gql:guardarPerfilAcademico'},
+  {role: 'ESTUDIANTE', path: 'gql:registrarHorasComplementarias'},
+  {role: 'BECARIO', path: 'gql:registrarHorasBecarias'}
 ] AS access
 MATCH (r:Role {name: access.role})
 MATCH (rt:Route {path: access.path})
@@ -124,7 +188,9 @@ UNWIND [
   {role: 'ENTRENADOR', menu: 'management'},
   {role: 'ENTRENADOR', menu: 'qr'},
   {role: 'COORDINADOR', menu: 'management'},
-  {role: 'COORDINADOR', menu: 'qr'}
+  {role: 'COORDINADOR', menu: 'qr'},
+  {role: 'BECARIO', menu: 'management'},
+  {role: 'BECARIO', menu: 'qr'}
 ] AS view
 MATCH (r:Role {name: view.role})
 MATCH (m:MenuNode {id: view.menu})
