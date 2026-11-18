@@ -4,7 +4,7 @@
   "description": "API Gateway federado de Campus Hub",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/authentication.test.js",
+    "test": "node --test test/authentication.test.js test/rbac-neo4j.test.js",
     "start": "node src/index.js"
   },
   "keywords": [],
@@ -14,9 +14,11 @@
   "dependencies": {
     "@apollo/gateway": "^2.14.4",
     "@apollo/server": "^5.5.1",
+    "amqplib": "^2.4.0",
     "dotenv": "^17.4.2",
     "graphql": "^16.14.2",
     "jsonwebtoken": "^9.0.3",
+    "neo4j-driver": "^6.3.2",
     "redis": "^6.3.0"
   }
 }

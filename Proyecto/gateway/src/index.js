@@ -13,6 +13,8 @@ import {
   requireJwtSecret
 } from './authentication.js';
 import { createRedisSessionStore } from './redis-session-store.js';
+import { createRbacGraph, rbacPlugin } from './rbac-neo4j.js';
+import { initRabbitMQ, emitirEventoSeguridad } from './rabbitmq.js';
 
 const jwtSecret = requireJwtSecret(process.env.JWT_SECRET);  // lee el JWT_SECRET
 const redisUrl = process.env.REDIS_URL;  // lee el REDIS_URL
@@ -25,6 +27,17 @@ if (typeof redisUrl !== 'string' || redisUrl.trim().length === 0) {
 
 const sessionStore = createRedisSessionStore(redisUrl);  // crea un store de sesiones en Redis
 await sessionStore.connect(); // conecta al store de sesiones en Redis
+
+// Neo4j es quien decide si una mutación se puede ejecutar (RBAC).
+// Los valores por defecto son los puertos que publica Docker Compose.
+const rbacGraph = createRbacGraph({
+  uri: process.env.NEO4J_URI || 'bolt://localhost:7688',
+  user: process.env.NEO4J_USER || 'neo4j',
+  password: process.env.NEO4J_PASSWORD || 'password123'
+});
+
+// RabbitMQ solo es para auditar los 403; si no conecta, el Gateway arranca igual.
+await initRabbitMQ(process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5673');
 
 const gateway = new ApolloGateway({  // crea un gateway de Apollo
   supergraphSdl: new IntrospectAndCompose({
@@ -65,7 +78,27 @@ const gateway = new ApolloGateway({  // crea un gateway de Apollo
 });
 
 const server = new ApolloServer({
-  gateway
+  gateway,
+  plugins: [
+    // Revisa cada mutación contra Neo4j antes de mandarla a los subgrafos.
+    rbacPlugin({
+      consultarPermiso: rbacGraph.consultarPermiso,
+      // Si se bloquea, mando el intento a auditoría (sin token, solo ids).
+      onAccessDenied: ({ actor, path, ip, motivo }) => {
+        emitirEventoSeguridad({
+          tipo_evento: 'ACCESS_DENIED',
+          usuario_id: actor.id,
+          ip_origen: ip || 'UNKNOWN',
+          exito: false,
+          motivo,
+          metadata: {
+            rol: actor.rol,
+            operacion: path
+          }
+        });
+      }
+    })
+  ]
 });
 
 const configuredPort = Number.parseInt(
@@ -86,7 +119,8 @@ const { url } = await startStandaloneServer(server, {
       req.headers.authorization,
       jwtSecret,
       sessionStore
-    )
+    ),
+    ip: req.socket?.remoteAddress // la IP solo se usa para el evento ACCESS_DENIED
   })
 });
 
