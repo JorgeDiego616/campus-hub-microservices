@@ -1,0 +1,48 @@
+# Ajustes SOLO para la VM. No cambia nada de Docker/docker-compose.yml:
+# se usa encima de él (levantar.sh lo hace así):
+#   docker compose -f Docker/docker-compose.yml -f Despliegue/docker-compose.nube.yml up -d
+#
+# Qué cambia en la nube y por qué:
+# 1) Puertos pegados a 127.0.0.1: en mi PC las BD escuchan en todas las
+#    interfaces. En la VM eso las dejaría abiertas a internet, y Docker se
+#    salta el firewall (ufw). Así solo los servicios de la misma VM las ven.
+#    "!override" reemplaza la lista de puertos en vez de sumarla.
+# 2) restart: unless-stopped: si la VM se reinicia, las BD vuelven solas.
+# 3) Límites de memoria para que las 5 BD + 6 servicios quepan en 8 GB
+#    (Scylla y Mongo por defecto agarran casi toda la RAM que ven).
+# 4) Sin RedisInsight (8002) ni el navegador de Neo4j (7475) ni el panel de
+#    RabbitMQ (15673): en la nube no los necesito abiertos.
+
+services:
+  mongodb:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:27018:27017"
+    command: ["--wiredTigerCacheSizeGB", "0.5"]
+
+  redis-stack:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:6380:6379"
+
+  neo4j:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:7688:7687"
+    environment:
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+
+  scylladb:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:9043:9042"
+    # developer-mode se queda: en contenedor el modo producción pide
+    # afinar el disco (scylla_io_setup) y no arranca. smp 1 = un solo núcleo.
+    command: --reactor-backend=epoll --developer-mode=1 --smp 1 --memory 750M --overprovisioned 1
+
+  rabbitmq:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:5673:5672"

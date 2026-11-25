@@ -24,3 +24,7 @@ Thumbs.db
 # Build/dist si en algún momento se compila algo
 dist/
 build/
+
+# Respaldo de MongoDB para pasarlo a la nube: trae emails y datos de los
+# usuarios, nunca se sube a git (se pasa a la VM con scp).
+Despliegue/respaldo/

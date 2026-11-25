@@ -1,0 +1,23 @@
+{
+  "name": "auditoria-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/authorization.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@apollo/server": "^5.5.1",
+    "@apollo/subgraph": "^2.15.0",
+    "amqplib": "^2.0.1",
+    "cassandra-driver": "^4.8.0",
+    "dotenv": "^17.4.2",
+    "graphql": "^16.14.2",
+    "jsonwebtoken": "^9.0.3"
+  }
+}

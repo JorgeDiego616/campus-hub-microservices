@@ -1,0 +1,26 @@
+{
+  "name": "seguridad-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/registro.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@apollo/server": "^5.5.1",
+    "@apollo/subgraph": "^2.15.1",
+    "amqplib": "^2.2.0",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.4.2",
+    "graphql": "^16.14.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.2",
+    "neo4j-driver": "^6.2.0",
+    "redis": "^6.3.0"
+  }
+}

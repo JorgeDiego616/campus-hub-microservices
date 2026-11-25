@@ -1,0 +1,57 @@
+type Rol {
+  id: ID!
+  nombre: String!
+}
+
+type MenuNode {
+  id: ID!
+  title: String!
+  order: Int
+  path: String
+  children: [MenuNode!]!
+}
+
+extend type Query {
+  verUsuario(id: ID!): Usuario
+  allUsuarios: [Usuario!]!
+  roles: [Rol!]!
+  validarAccesoRuta(path: String!): Boolean!
+  menuUsuario: [MenuNode!]!
+}
+
+extend type Mutation {
+  registrarUsuario(
+    matricula: String!
+    nombre: String!
+    email: String!
+    password: String!
+    # Opcional: si no se manda, el usuario queda como ESTUDIANTE.
+    # Pedir otro rol solo lo puede hacer un ADMIN con sesión activa.
+    rol: String
+  ): Usuario!
+
+  cambiarRolUsuario(
+    userId: ID!
+    nuevoRol: String!
+  ): Usuario!
+
+  login(email: String!, password: String!): AuthPayload!
+
+  logout: Boolean!
+
+  crearRol(nombre: String!): Rol!
+}
+
+type Usuario @key(fields: "id") {
+  id: ID!
+  matricula: String!
+  nombre: String!
+  email: String!
+  rol: String!
+  activo: Boolean!
+}
+
+type AuthPayload {
+  token: String!
+  usuario: Usuario!
+}

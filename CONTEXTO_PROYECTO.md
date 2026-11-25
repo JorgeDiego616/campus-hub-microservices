@@ -1,5 +1,7 @@
 # Contexto del Proyecto: UlsaHub (Campus Hub)
 
+> **Migración a la nube: en pausa.** Estado, lo ya corregido (rama `feature/correcciones-nube`) y lo pendiente en [MIGRACION_NUBE_BACKEND_ANDROID.md](MIGRACION_NUBE_BACKEND_ANDROID.md), sección 0.
+
 ## Arquitectura General
 
 **Microservicios con Apollo Federation (Gateway + Subgraphs)**
@@ -117,17 +119,17 @@ docker exec -it ulsa-redis-stack redis-cli -a password123
 docker ps | findstr ulsa
 
 # Reiniciar servicio individual
-cd Proyecto/node_modules-v2/services/<servicio> && npm start
+cd Proyecto/services/<servicio> && npm start
 ```
 
 ---
 
 ## Problemas Conocidos / Pendientes
 
-1. **Gateway no tiene healthcheck** para subgraphs caídos
+1. **Gateway sin healthcheck** de subgrafos caídos *después* de arrancar. Al arrancar ya espera a que todos respondan (`gateway/src/esperar-subgrafos.js`).
 2. **Lock en memoria** (`_cacheLocks`) se pierde si hay múltiples instancias de academico-service (solo funciona en single-instance)
 3. **Audit service** usa ScyllaDB local; en docker necesita `INFRASTRUCTURE_MODE=docker`
-4. **Deportes/Mapa** usan BD `resistencia` y `mapa` distintas; no comparten datos con académico
+4. **Deportes/Mapa** usan BD `deportes` y `mapa` distintas; no comparten datos con académico (deportes antes usaba `resistencia` por un `MONGODB_URI` viejo en su `.env`; los equipos ya se copiaron a `deportes`)
 5. **Neo4j** en seguridad-service para grafos de permisos/roles (no usado activamente en horarios)
 
 ---

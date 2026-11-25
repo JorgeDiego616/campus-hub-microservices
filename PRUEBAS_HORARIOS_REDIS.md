@@ -7,19 +7,19 @@
 cd Docker && docker-compose up -d
 
 # 2. Seguridad (4005)
-cd Proyecto/node_modules-v2/services/seguridad-service && npm start
+cd Proyecto/services/seguridad-service && npm start
 
 # 3. Académico (4004)
-cd Proyecto/node_modules-v2/services/academico-service && npm start
+cd Proyecto/services/academico-service && npm start
 
 # 4. Deportes (4001)
-cd Proyecto/node_modules-v2/services/deportes-service && npm start
+cd Proyecto/services/deportes-service && npm start
 
 # 5. Mapa (4002)
-cd Proyecto/node_modules-v2/services/mapa-service && npm start
+cd Proyecto/services/mapa-service && npm start
 
 # 6. Auditoría (4003)
-cd Proyecto/node_modules-v2/services/auditoria-service && npm start
+cd Proyecto/services/auditoria-service && npm start
 
 # 7. Gateway (4000)
 cd Proyecto/gateway && npm start
@@ -31,12 +31,14 @@ cd Proyecto/gateway && npm start
 
 ### 1. Crear usuarios
 ```graphql
-# ALUMNO
-mutation { registrarUsuario(matricula:"2024001", nombre:"Juan", email:"juan@test.com", password:"123456", rol:"ESTUDIANTE") { id } }
+# ALUMNO (sin rol queda ESTUDIANTE)
+mutation { registrarUsuario(matricula:"2024001", nombre:"Juan", email:"juan@test.com", password:"123456") { id } }
 
-# ADMIN
-mutation { registrarUsuario(matricula:"ADMIN001", nombre:"Admin", email:"admin@test.com", password:"123456", rol:"ADMIN") { id } }
+# ADMIN: se registra igual (queda ESTUDIANTE) y luego se sube a ADMIN
+mutation { registrarUsuario(matricula:"2024900", nombre:"Admin", email:"admin@test.com", password:"123456") { id } }
 ```
+
+> `registrarUsuario` ya no deja que un anónimo pida `rol:"ADMIN"`. El primer ADMIN se sube en MongoDB y se reinicia `seguridad-service` para que Neo4j lo sepa (pasos en `GUIA_CLONADO_Y_CONFIGURACION.md`, paso 8). La matrícula debe ser de 6 a 10 dígitos (`ADMIN001` no pasa la validación).
 
 ### 2. Login y guardar tokens
 ```graphql
@@ -57,7 +59,8 @@ mutation {
 ### 4. Profesor + Asignación + Inscripción (token ADMIN)
 ```graphql
 mutation {
-  registrarUsuario(matricula:"PROF001", nombre:"Dr. García", email:"prof@test.com", password:"123456", rol:"PROFESOR") { id }
+  # Con el token del ADMIN sí se puede mandar rol (un anónimo recibe FORBIDDEN)
+  registrarUsuario(matricula:"2024800", nombre:"Dr. García", email:"prof@test.com", password:"123456", rol:"PROFESOR") { id }
   crearAsignacionMateria(input:{materiaId:"<MAT_ID>", profesorId:"<PROF_ID>", periodoId:"<PER_ID>", grupo:"A"}) { id }
   inscribirAlumno(input:{alumnoId:"<ALU_ID>", asignacionMateriaId:"<ASIG_ID>", estado:"ACTIVA"}) { id }
 }

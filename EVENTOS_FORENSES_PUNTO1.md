@@ -14,9 +14,9 @@ Se implementaron los 4 eventos críticos de auditoría acordados, siguiendo el e
 
 | # | Ruta | Líneas aproximadas | Qué se cambió |
 |---|------|-------------------|---------------|
-| 1 | `Proyecto/node_modules-v2/services/seguridad-service/src/index.js` | 142-151, 348-468, 503-516, 525-647, 780-801 | Eventos `AUTENTICACION_USUARIO`, `SESION_REVOCADA`, `ASIGNACION_ROL_PERMISO` + utilidad `enmascararCorreo()` |
-| 2 | `Proyecto/node_modules-v2/services/academico-service/src/infrastructure/gateway-identity.js` | 22, 48-50 | Actor incluye `ip_origen` y `jti` |
-| 3 | `Proyecto/node_modules-v2/services/academico-service/src/application/academic-use-cases.js` | 136-166 | Resolver `calificaciones` emite `CONSULTA_DATOS_SENSIBLES` |
+| 1 | `Proyecto/services/seguridad-service/src/index.js` | 142-151, 348-468, 503-516, 525-647, 780-801 | Eventos `AUTENTICACION_USUARIO`, `SESION_REVOCADA`, `ASIGNACION_ROL_PERMISO` + utilidad `enmascararCorreo()` |
+| 2 | `Proyecto/services/academico-service/src/infrastructure/gateway-identity.js` | 22, 48-50 | Actor incluye `ip_origen` y `jti` |
+| 3 | `Proyecto/services/academico-service/src/application/academic-use-cases.js` | 136-166 | Resolver `calificaciones` emite `CONSULTA_DATOS_SENSIBLES` |
 
 ### Commits realizados
 
@@ -159,3 +159,28 @@ El evento `CONSULTA_DATOS_SENSIBLES` con `resultado: 'denegado'` no se emite act
 2. Crear un Pull Request desde `feature/eventos-forenses-auditoria` hacia `main`
 
 Esto no se ha hecho aún; quedará a tu criterio ejecutarlo.
+
+---
+
+## 8. Actualización 24/nov/2026 (rama `feature/correcciones-nube`)
+
+Revisando los eventos ya guardados en ScyllaDB salió que el "desde dónde" no servía: los 30 eventos tenían `ip_origen = ::1` y `user_agent = NO_DISPONIBLE`. Detalle completo en `MIGRACION_NUBE_BACKEND_ANDROID.md`, sección 0.1 (#8, #10, #14) y sección 15.
+
+**IP y user-agent reales**
+- Antes: seguridad tomaba `req.socket.remoteAddress`, que es la conexión del Gateway, no la del usuario. El user-agent nunca se llenaba.
+- Después: el Gateway calcula la IP del cliente (`gateway/src/client-info.js`) y la manda en `x-forwarded-for`, junto con `x-client-user-agent`. Seguridad, académico y deportes la usan en `ip_origen`, y seguridad pone el user-agent en `metadata.user_agent`. En la nube (`TRUST_PROXY=true`, detrás de Caddy) se toma el último valor de `X-Forwarded-For`; en local se ignora para que nadie pueda falsificarlo.
+- Esto también corrige la IP de `ACCESS_DENIED` (Gateway) y de `CONSULTA_DATOS_SENSIBLES` (académico).
+
+**Eventos de deportes ahora forenses**
+- Antes: `EQUIPO_REGISTRADO` y `PRACTICA_REGISTRADA` llegaban con `usuario_id` e `ip_origen` en `null`; no se sabía quién registró.
+- Después: llevan `usuario_id`, `ip_origen`, `jti`, `severidad: 'INFO'`, `operacion` y `metadata.rol` (helper `datosAuditoria(actor)` en `deportes-service/src/application/sports-use-cases.js`).
+
+| Evento | Severidad | Acción que lo detona | Justificación |
+|---|---|---|---|
+| `EQUIPO_REGISTRADO` | INFO | `registrarEquipo` (deportes) | Quién dio de alta un equipo y desde dónde |
+| `PRACTICA_REGISTRADA` | INFO | `registrarPractica` (deportes) | Quién reservó un espacio/horario y desde dónde |
+
+**Nuevo caso de `ASIGNACION_ROL_PERMISO`**
+- `registrarUsuario` con un `rol` distinto de `ESTUDIANTE` sin ser ADMIN → evento `ASIGNACION_ROL_PERMISO`, `resultado: 'denegado'`, `severidad: 'CRITICAL'`, `operacion: 'registrarUsuario'`, `metadata.nuevo_rol` y `metadata.rol_solicitante`. Es el mismo formato que ya usaban `crearRol` y `cambiarRolUsuario` para los intentos sin privilegios.
+
+**CWE-532:** los eventos nuevos tampoco guardan contraseñas, tokens ni correos; solo ids opacos, IP, rol y el `jti`.

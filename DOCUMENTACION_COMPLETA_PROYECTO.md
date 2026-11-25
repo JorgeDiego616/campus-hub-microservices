@@ -266,12 +266,15 @@ type Rol { id: ID!, nombre: String! }
 type MenuNode { id: ID!, title: String!, order: Int, path: String, children: [MenuNode!]! }
 type AuthPayload { token: String!, usuario: Usuario! }
 extend type Query {
-  verUsuario(id: ID!): Usuario, allUsuarios: [Usuario!]!, roles: [Rol!]!
+  verUsuario(id: ID!): Usuario        # el propio usuario o ADMIN
+  allUsuarios: [Usuario!]!            # solo ADMIN
+  roles: [Rol!]!                      # cualquier usuario con sesión
   validarAccesoRuta(path: String!): Boolean!   # usuario tomado del token
   menuUsuario: [MenuNode!]!                    # usuario tomado del token
 }
 extend type Mutation {
-  registrarUsuario(matricula: String!, nombre: String!, email: String!, password: String!, rol: String!): Usuario!
+  # rol opcional: sin rol = ESTUDIANTE; otro rol solo lo puede pedir un ADMIN con sesión
+  registrarUsuario(matricula: String!, nombre: String!, email: String!, password: String!, rol: String): Usuario!
   cambiarRolUsuario(userId: ID!, nuevoRol: String!): Usuario!
   login(email: String!, password: String!): AuthPayload!
   logout: Boolean!
@@ -280,7 +283,7 @@ extend type Mutation {
 ```
 
 ### 5.2 Académico (`academico-service/schema.graphql`)
-Ver archivo completo en `Proyecto/node_modules-v2/services/academico-service/src/schema.graphql`
+Ver archivo completo en `Proyecto/services/academico-service/src/schema.graphql`
 - **Queries:** carreras, materias, periodos, perfilAcademico, asignaciones, inscripciones, calificaciones, faltas, examenes, **horarios**, **miHorario**, **horarioAlumno**
 - **Mutations:** CRUD catálogo + inscripciones + calificaciones + faltas + examenes + horas + **crearSesionHorario / actualizarSesionHorario / eliminarSesionHorario**
 - **Type `SesionHorario`:** id, asignacionMateriaId, materia, grupo, diaSemana, dia, horaInicio, horaFin, aula, carreraIds
@@ -329,7 +332,7 @@ NEO4J_PASSWORD=password123
 RABBITMQ_URL=amqp://guest:guest@localhost:5673
 ```
 
-### Seguridad (`Proyecto/node_modules-v2/services/seguridad-service/.env`)
+### Seguridad (`Proyecto/services/seguridad-service/.env`)
 ```env
 JWT_SECRET=<mismo que gateway>
 REDIS_URL=redis://:password123@localhost:6380
@@ -341,7 +344,7 @@ RABBITMQ_URL=amqp://guest:guest@localhost:5673
 PORT=4005
 ```
 
-### Académico (`Proyecto/node_modules-v2/services/academico-service/.env`)
+### Académico (`Proyecto/services/academico-service/.env`)
 ```env
 INFRASTRUCTURE_MODE=local
 REDIS_URL=redis://:password123@localhost:6380
@@ -352,7 +355,7 @@ JWT_SECRET=<mismo que gateway>
 PORT=4004
 ```
 
-### Mapa (`Proyecto/node_modules-v2/services/mapa-service/.env`)
+### Mapa (`Proyecto/services/mapa-service/.env`)
 ```env
 INFRASTRUCTURE_MODE=local
 REDIS_URL=redis://:password123@localhost:6380
@@ -362,14 +365,14 @@ RABBITMQ_URL=amqp://guest:guest@localhost:5673
 PORT=4002
 ```
 
-### Deportes (`Proyecto/node_modules-v2/services/deportes-service/.env`)
+### Deportes (`Proyecto/services/deportes-service/.env`)
 ```env
 MONGODB_URI=mongodb://admin:password123@localhost:27018/deportes?authSource=admin
 RABBITMQ_URL=amqp://guest:guest@localhost:5673
 PORT=4001
 ```
 
-### Auditoría (`Proyecto/node_modules-v2/services/auditoria-service/.env`)
+### Auditoría (`Proyecto/services/auditoria-service/.env`)
 ```env
 SCYLLADB_CONTACT_POINTS=127.0.0.1
 SCYLLADB_PORT=9043
@@ -396,10 +399,10 @@ PORT_AUDITORIA=4003
 cd Proyecto/gateway && npm test
 
 # Académico
-cd Proyecto/node_modules-v2/services/academico-service && npm test
+cd Proyecto/services/academico-service && npm test
 
 # Mapa
-cd Proyecto/node_modules-v2/services/mapa-service && npm test
+cd Proyecto/services/mapa-service && npm test
 ```
 
 ---
@@ -443,7 +446,7 @@ docker exec ulsa-rabbitmq rabbitmqctl list_queues name messages_ready messages_u
 # 3) seguridad (siembra Neo4j) → academico, deportes, mapa, auditoria  4) gateway al final
 
 # Reiniciar servicio individual
-cd Proyecto/node_modules-v2/services/<servicio> && npm start
+cd Proyecto/services/<servicio> && npm start
 
 # Cambiar TTL horarios (academico-service)
 # Editar .env: HORARIO_TTL_SECONDS=3600  # 1h
@@ -461,7 +464,7 @@ cd Proyecto/node_modules-v2/services/<servicio> && npm start
 5. **Neo4j** decide el acceso a todas las mutaciones desde el Gateway; los subgrafos conservan una segunda capa en `domain/authorization.js` (debe mantenerse alineada con el grafo)
 6. **Rate limiting** no implementado en gateway
 7. **Métricas** (hit/miss ratio) no expuestas en `/metrics`
-8. **`registrarUsuario` es pública y acepta cualquier rol** (incluido `ADMIN`); útil para la demo, pero en producción el rol inicial debería forzarse a `ESTUDIANTE`
+8. ~~**`registrarUsuario` es pública y acepta cualquier rol**~~ ✅ Corregido: sin `rol` queda `ESTUDIANTE`; pedir otro rol exige un ADMIN con sesión (y el intento se audita como `ASIGNACION_ROL_PERMISO` denegado). `allUsuarios`/`verUsuario`/`roles` ya piden sesión.
 9. **Gateway usa `IntrospectAndCompose`**: si se reinicia con un subgrafo caído, no arranca
 10. **auditoria-service**: si ScyllaDB no responde al arrancar, el worker no se inicia (hay que reiniciar el servicio cuando Scylla esté lista)
 11. La tabla vieja `auditoria.logs_auditoria` sigue existiendo pero ya no se usa (se puede borrar con `DROP TABLE`)

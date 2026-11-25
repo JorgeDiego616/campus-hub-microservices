@@ -1,0 +1,7 @@
+# Los scripts se corren en la VM (Linux). Mi git en Windows tiene
+# core.autocrlf=true y les pondría \r\n; con eso bash truena con
+# "$'\r': command not found". Así siempre bajan con \n.
+*.sh text eol=lf
+Caddyfile text eol=lf
+*.cjs text eol=lf
+*.yml text eol=lf

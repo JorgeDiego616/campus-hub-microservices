@@ -1,0 +1,10 @@
+# Caddy recibe el HTTPS (443) y se lo pasa al Gateway en el puerto 4000.
+# instalar-vm.sh cambia DOMINIO_AQUI por algo como 20-30-40-50.sslip.io
+# y Caddy saca el certificado de Let's Encrypt solo (necesita el 80 abierto).
+#
+# Caddy agrega X-Forwarded-For con la IP real del celular; por eso el
+# Gateway lleva TRUST_PROXY=true en la nube (ver gateway/src/client-info.js).
+DOMINIO_AQUI {
+	encode gzip
+	reverse_proxy localhost:4000
+}
