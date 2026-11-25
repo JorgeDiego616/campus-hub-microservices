@@ -1,3 +1,8 @@
+import { ErrorDeDominio } from './errors.js';
+
+// Las reglas de negocio lanzan ErrorDeDominio (antes new Error) para que
+// lleguen al cliente como BAD_USER_INPUT y no como error interno.
+
 export const DIAS_SEMANA = {
   1: 'LUNES',
   2: 'MARTES',
@@ -24,16 +29,16 @@ export class SesionHorario {
 
   validar() {
     if (!this.asignacionMateriaId) {
-      throw new Error('La sesión necesita una asignación de materia.');
+      throw new ErrorDeDominio('La sesión necesita una asignación de materia.');
     }
     if (!Number.isInteger(this.diaSemana) || this.diaSemana < 1 || this.diaSemana > 7) {
-      throw new Error('El día de la semana debe ser un número del 1 (lunes) al 7 (domingo).');
+      throw new ErrorDeDominio('El día de la semana debe ser un número del 1 (lunes) al 7 (domingo).');
     }
     if (!FORMATO_HORA.test(this.horaInicio) || !FORMATO_HORA.test(this.horaFin)) {
-      throw new Error('Las horas deben tener el formato HH:mm (24 horas).');
+      throw new ErrorDeDominio('Las horas deben tener el formato HH:mm (24 horas).');
     }
     if (this.horaFin <= this.horaInicio) {
-      throw new Error('La hora final debe ser posterior a la inicial.');
+      throw new ErrorDeDominio('La hora final debe ser posterior a la inicial.');
     }
   }
 }

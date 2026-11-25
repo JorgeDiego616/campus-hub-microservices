@@ -1,4 +1,6 @@
+import mongoose from 'mongoose';
 import { EspacioModel } from './mongoose-models.js';
+import { RecursoNoEncontrado } from '../domain/errors.js'; // antes: new Error -> salía como 500
 
 function toDto(doc) {
   if (!doc) return null;
@@ -37,6 +39,11 @@ export function createEspacioRepository() {
     },
 
     async findById(id) {
+      // Con un id mal formado (ej. "xx") Mongoose tronaba con
+      // "Cast to ObjectId failed" y salía como error interno. Para la app
+      // es lo mismo que no existir: regreso null (y requireById da NOT_FOUND).
+      if (!mongoose.isValidObjectId(id)) return null;
+
       const doc = await EspacioModel.findById(id);
       return toDto(doc);
     },
@@ -45,7 +52,7 @@ export function createEspacioRepository() {
       const espacio = await this.findById(id);
 
       if (!espacio) {
-        throw new Error('El espacio solicitado no existe.');
+        throw new RecursoNoEncontrado('El espacio solicitado no existe.');
       }
 
       return espacio;

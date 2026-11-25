@@ -4,7 +4,7 @@
   "description": "API Gateway federado de Campus Hub",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/authentication.test.js test/rbac-neo4j.test.js",
+    "test": "node --test test/authentication.test.js test/rbac-neo4j.test.js test/esperar-subgrafos.test.js test/client-info.test.js test/format-error.test.js test/rest-eventos.test.js",
     "start": "node src/index.js"
   },
   "keywords": [],

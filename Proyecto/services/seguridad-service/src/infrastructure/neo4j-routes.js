@@ -65,7 +65,12 @@ const GRAPHQL_OPERATIONS = [
   { path: 'gql:inscribirAlumno', title: 'Inscribir alumno', public: false },
   { path: 'gql:guardarPerfilAcademico', title: 'Guardar perfil académico', public: false },
   { path: 'gql:registrarHorasComplementarias', title: 'Registrar horas complementarias', public: false },
-  { path: 'gql:registrarHorasBecarias', title: 'Registrar horas becarias', public: false }
+  { path: 'gql:registrarHorasBecarias', title: 'Registrar horas becarias', public: false },
+  // Eventos y QR (deportes-service). Si no las doy de alta aquí, el Gateway
+  // las bloquea con 403 porque cierra todo lo que no está en el catálogo.
+  { path: 'gql:crearEvento', title: 'Crear evento', public: false },
+  { path: 'gql:registrarAsistente', title: 'Registrar asistente a evento', public: false },
+  { path: 'gql:crearQR', title: 'Generar código QR', public: false }
 ];
 
 // Solo le doy el permiso al rol más bajo que lo necesita.
@@ -94,7 +99,19 @@ const GRAPHQL_ACCESS = [
   { role: 'ESTUDIANTE', path: 'gql:registrarHorasComplementarias' },
   // BECARIO = coordinador de becas: él registra las horas de los estudiantes
   // becarios. El estudiante no se las registra solo. ADMIN lo hereda.
-  { role: 'BECARIO', path: 'gql:registrarHorasBecarias' }
+  { role: 'BECARIO', path: 'gql:registrarHorasBecarias' },
+  // Crear eventos: los mismos 4 roles que ven la pantalla qr_screen
+  // (ACCESS de arriba). ADMIN los hereda a todos.
+  { role: 'ENTRENADOR', path: 'gql:crearEvento' },
+  { role: 'PROFESOR', path: 'gql:crearEvento' },
+  { role: 'COORDINADOR', path: 'gql:crearEvento' },
+  { role: 'BECARIO', path: 'gql:crearEvento' },
+  // Registrarse y pedir su QR lo hace el estudiante (registration_screen);
+  // todos los demás roles heredan ESTUDIANTE. Que solo un gestor pueda dar
+  // de alta un evento nuevo desde crearQR lo revisa deportes-service,
+  // porque depende de si el evento ya existe (Neo4j no lo sabe).
+  { role: 'ESTUDIANTE', path: 'gql:registrarAsistente' },
+  { role: 'ESTUDIANTE', path: 'gql:crearQR' }
 ];
 
 export async function seedRoutesAndAccess(driver) {

@@ -18,9 +18,11 @@ import {
   assertCanRegisterHours,
   assertCanRegisterScholarshipHours,
   assertProfessorOwnsAssignment,
+  forbidden,
   requireActor,
   Roles
 } from '../domain/authorization.js';
+import { ErrorDeDominio } from '../domain/errors.js';
 
 // Caché vacía por si no se inyecta ninguna (el sistema funciona igual, sin caché)
 const CACHE_VACIA = { get: async () => null, set: async () => {}, del: async () => {} };
@@ -95,7 +97,8 @@ export class AcademicUseCases {
     if (actor.rol === Roles.ESTUDIANTE) {
       return this.repositories.asignaciones.findByStudent(actor.id, periodoId);
     }
-    throw new Error('No tienes permiso para consultar asignaciones.');
+    // Esto es de permiso, no de datos: va como 403 (antes salía como error 500).
+    throw forbidden('No tienes permiso para consultar asignaciones.');
   }
 
   async inscribir(actor, input) {
@@ -203,7 +206,8 @@ export class AcademicUseCases {
     } else {
       assertCanAccessStudent(actor, actor.id);
       const estaInscrito = await this.repositories.inscripciones.exists(actor.id, asignacionMateriaId);
-      if (!estaInscrito) throw new Error('No tienes una inscripción en esta asignación.');
+      // Tampoco es un dato mal escrito: no le toca ver esto, entonces 403.
+      if (!estaInscrito) throw forbidden('No tienes una inscripción en esta asignación.');
     }
     return this.repositories.examenes.findByAsignacion(asignacionMateriaId);
   }
@@ -272,7 +276,7 @@ export class AcademicUseCases {
     const base = { diaSemana: sesion.diaSemana, horaInicio: sesion.horaInicio, horaFin: sesion.horaFin, excludeId };
 
     const choqueProfesor = await this.repositories.horarios.findOverlapping({ ...base, asignacionIds: idsDelProfesor });
-    if (choqueProfesor.length) throw new Error('El profesor ya tiene otra sesión en ese día y horario.');
+    if (choqueProfesor.length) throw new ErrorDeDominio('El profesor ya tiene otra sesión en ese día y horario.');
 
     if (sesion.aula) {
       const choqueAula = await this.repositories.horarios.findOverlapping({
@@ -280,7 +284,7 @@ export class AcademicUseCases {
         asignacionIds: delPeriodo.map((item) => item.id),
         aula: sesion.aula
       });
-      if (choqueAula.length) throw new Error('El aula ya está ocupada en ese día y horario.');
+      if (choqueAula.length) throw new ErrorDeDominio('El aula ya está ocupada en ese día y horario.');
     }
   }
 

@@ -50,7 +50,12 @@ export const rbacService = {
         path: record.get('path'),
         children: record.get('children')
           .filter(Boolean)
-          .map(child => ({ ...child, order: toNumber(child.order) }))
+          // children: [] porque en el schema es [MenuNode!]! (no puede ser
+          // null). Antes los hijos no lo traían y la app, que pide 3 niveles
+          // del menú, tronaba con "Cannot return null for non-nullable field
+          // MenuNode.children" para todos los que ven Gestión -> Crear evento / QR.
+          // El menú solo tiene 2 niveles, así que los hijos no tienen hijos.
+          .map(child => ({ ...child, order: toNumber(child.order), children: [] }))
           .sort((a, b) => a.order - b.order)
       }));
     } finally {

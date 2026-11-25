@@ -23,11 +23,23 @@ function validGatewayRequest() {
   };
 }
 
+// Desde el commit f46bd09 el actor también trae ip_origen y jti (los usa el
+// evento CONSULTA_DATOS_SENSIBLES). El código estaba bien; la prueba seguía
+// esperando solo { id, rol } y por eso fallaba. Sin socket ni header la IP
+// queda en 'UNKNOWN'.
 test('acepta la identidad del Gateway únicamente si coincide con el JWT', () => {
   assert.deepEqual(
     actorFromGatewayRequest(validGatewayRequest(), testSecret),
-    { id: 'usuario-admin', rol: 'ADMIN' }
+    { id: 'usuario-admin', rol: 'ADMIN', ip_origen: 'UNKNOWN', jti: 'sesion-academica' }
   );
+});
+
+// El Gateway ahora manda la IP real del cliente en x-forwarded-for
+// (gateway/src/client-info.js); académico la usa para la auditoría.
+test('usa la IP que manda el Gateway en x-forwarded-for', () => {
+  const request = validGatewayRequest();
+  request.headers['x-forwarded-for'] = '189.2.3.4';
+  assert.equal(actorFromGatewayRequest(request, testSecret).ip_origen, '189.2.3.4');
 });
 
 test('rechaza encabezados x-user falsificados o que no coinciden con el JWT', () => {
@@ -64,7 +76,12 @@ test('acepta un rol dinámico autenticado, sin conceder permisos ADMIN', async (
     eventPublisher: { async publish() {} }
   });
 
-  assert.deepEqual(actor, { id: 'usuario-coordinador', rol: 'COORDINADOR' });
+  assert.deepEqual(actor, {
+    id: 'usuario-coordinador',
+    rol: 'COORDINADOR',
+    ip_origen: 'UNKNOWN',
+    jti: 'sesion-dinamica'
+  });
   await assert.rejects(
     () => useCases.crearMateria(actor, { nombre: 'Física', creditos: 8 }),
     /Solo ADMIN/

@@ -32,14 +32,12 @@ UlsaHub/
 │   └── docker-compose.yml
 ├── Proyecto/
 │   ├── gateway/                         # API Gateway (puerto 4000)
-│   └── node_modules-v2/
-│       ├── node_modules/                # IGNORADO por git
-│       └── services/
-│           ├── seguridad-service/       # 4005
-│           ├── academico-service/       # 4004
-│           ├── deportes-service/        # 4001
-│           ├── mapa-service/            # 4002
-│           └── auditoria-service/       # 4003
+│   └── services/
+│       ├── seguridad-service/           # 4005
+│       ├── academico-service/           # 4004
+│       ├── deportes-service/            # 4001
+│       ├── mapa-service/                # 4002
+│       └── auditoria-service/           # 4003
 ├── .gitignore
 ├── CONTEXTO_PROYECTO.md
 ├── DOCUMENTACION_COMPLETA_PROYECTO.md
@@ -47,7 +45,7 @@ UlsaHub/
 └── GUIA_CLONADO_Y_CONFIGURACION.md
 ```
 
-> La carpeta se llama `node_modules-v2`, pero **no está ignorada**: el patrón `node_modules/` solo excluye carpetas llamadas exactamente `node_modules`. Los servicios sí se suben al repo.
+> Antes los servicios vivían en `Proyecto/services`. Lo cambié a `Proyecto/services` porque un nombre que empieza con `node_modules` lo ignoran muchas herramientas (`.dockerignore`, CI, buscadores del editor) y se podía perder el código. Cada servicio tiene su propio `package.json` y su propio `node_modules/` (ignorado por git).
 
 ### Qué NO viene en el repo
 
@@ -123,11 +121,11 @@ $root = "C:\ruta\a\UlsaHub"
 
 $dirs = @(
   "$root\Proyecto\gateway",
-  "$root\Proyecto\node_modules-v2\services\seguridad-service",
-  "$root\Proyecto\node_modules-v2\services\academico-service",
-  "$root\Proyecto\node_modules-v2\services\deportes-service",
-  "$root\Proyecto\node_modules-v2\services\mapa-service",
-  "$root\Proyecto\node_modules-v2\services\auditoria-service"
+  "$root\Proyecto\services\seguridad-service",
+  "$root\Proyecto\services\academico-service",
+  "$root\Proyecto\services\deportes-service",
+  "$root\Proyecto\services\mapa-service",
+  "$root\Proyecto\services\auditoria-service"
 )
 
 foreach ($d in $dirs) {
@@ -164,11 +162,11 @@ $secret = "<PEGA_AQUI_EL_SECRETO_GENERADO>"
 
 $dirs = @(
   "$root\Proyecto\gateway",
-  "$root\Proyecto\node_modules-v2\services\seguridad-service",
-  "$root\Proyecto\node_modules-v2\services\academico-service",
-  "$root\Proyecto\node_modules-v2\services\deportes-service",
-  "$root\Proyecto\node_modules-v2\services\mapa-service",
-  "$root\Proyecto\node_modules-v2\services\auditoria-service"
+  "$root\Proyecto\services\seguridad-service",
+  "$root\Proyecto\services\academico-service",
+  "$root\Proyecto\services\deportes-service",
+  "$root\Proyecto\services\mapa-service",
+  "$root\Proyecto\services\auditoria-service"
 )
 
 foreach ($d in $dirs) {
@@ -295,23 +293,23 @@ Abre una terminal por servicio y ejecuta `npm start`:
 
 ```powershell
 # Terminal 1
-cd Proyecto\node_modules-v2\services\seguridad-service
+cd Proyecto\services\seguridad-service
 npm start
 
 # Terminal 2
-cd Proyecto\node_modules-v2\services\academico-service
+cd Proyecto\services\academico-service
 npm start
 
 # Terminal 3
-cd Proyecto\node_modules-v2\services\deportes-service
+cd Proyecto\services\deportes-service
 npm start
 
 # Terminal 4
-cd Proyecto\node_modules-v2\services\mapa-service
+cd Proyecto\services\mapa-service
 npm start
 
 # Terminal 5
-cd Proyecto\node_modules-v2\services\auditoria-service
+cd Proyecto\services\auditoria-service
 npm start
 
 # Terminal 6 (cuando los 5 anteriores ya escuchen)
@@ -330,7 +328,7 @@ New-Item -ItemType Directory -Force -Path $log | Out-Null
 $svcs = @("seguridad-service","academico-service","deportes-service","mapa-service","auditoria-service")
 $pids = @()
 foreach ($s in $svcs) {
-  $dir = "$root\Proyecto\node_modules-v2\services\$s"
+  $dir = "$root\Proyecto\services\$s"
   $p = Start-Process node -ArgumentList "src/index.js" -WorkingDirectory $dir `
        -RedirectStandardOutput "$log\$s.out.log" -RedirectStandardError "$log\$s.err.log" `
        -PassThru -WindowStyle Hidden
@@ -371,26 +369,40 @@ Get-Content "$log\seguridad-service.err.log" -Tail 30
 Get-Content "$log\gateway.err.log" -Tail 30
 ```
 
-Prueba rápida de GraphQL en el Gateway:
+Prueba rápida de GraphQL en el Gateway (no necesita token):
 
 ```powershell
-$body = @{ query = 'query { roles { id nombre } }' } | ConvertTo-Json
+$body = @{ query = 'query { __typename }' } | ConvertTo-Json
 Invoke-RestMethod -Uri "http://localhost:4000/" -Method Post -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 5
 ```
 
-Debe devolver los 5 roles sembrados en MongoDB.
+Debe devolver `{"data":{"__typename":"Query"}}`. La consulta `roles` ya **pide sesión** (antes era pública); se prueba en el paso 8, después del login, y devuelve los 6 roles.
 
 ---
 
 ## 10. Paso 8 — Crear un usuario y probar permisos
 
-### Registrar un ADMIN
+### Registrar el primer ADMIN
+
+`registrarUsuario` es pública, pero **ya no deja elegir rol**: si no se manda `rol` queda como `ESTUDIANTE`, y pedir otro rol solo lo puede hacer un ADMIN con sesión. (Antes cualquiera podía registrarse como ADMIN.)
+
+Por eso el **primer** ADMIN se crea en tres pasos: registrarlo normal, subirle el rol directo en MongoDB y reiniciar `seguridad-service` para que lo copie a Neo4j (`syncUsersToGraph` corre al arrancar; sin esto el Gateway lo seguiría tratando como ESTUDIANTE).
 
 ```powershell
-$q = 'mutation { registrarUsuario(matricula:"20260001", nombre:"Admin", email:"admin@ulsa.mx", password:"Password123", rol:"ADMIN") { id rol } }'
+# 1) Registro normal (queda ESTUDIANTE)
+$q = 'mutation { registrarUsuario(matricula:"20260001", nombre:"Admin", email:"admin@ulsa.mx", password:"Password123") { id rol } }'
 $body = @{ query = $q } | ConvertTo-Json
 Invoke-RestMethod -Uri "http://localhost:4000/" -Method Post -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 5
+
+# 2) Subirlo a ADMIN en MongoDB
+docker exec ulsa-mongodb mongosh -u admin -p password123 --authenticationDatabase admin seguridad --quiet --eval "db.usuarios.updateOne({email:'admin@ulsa.mx'},{`$set:{rol:'ADMIN'}})"
+
+# 3) Reiniciar seguridad-service (Ctrl+C en su ventana y volver a correr: node src/index.js)
 ```
+
+Los siguientes ADMIN, PROFESOR, etc. ya no necesitan Mongo: el ADMIN los registra mandando `rol` con su token, o usa `cambiarRolUsuario` (esa sí actualiza Neo4j al momento).
+
+> El email se guarda en minúsculas y la contraseña debe tener al menos 6 caracteres.
 
 ### Login y token
 
@@ -449,6 +461,9 @@ docker compose down
 | `Neo4j` conecta al 7687 y falla | La variable no está o usa el puerto equivocado | `NEO4J_URI=bolt://localhost:7688` |
 | El Gateway no arranca / composición falla | Un subgrafo está caído | Levantar los 5 subgrafos antes del Gateway |
 | `registrarUsuario` dice "El rol no existe" | Seguridad no arrancó o no sembró roles | Reiniciar `seguridad-service` y revisar su log |
+| `registrarUsuario` dice "Solo un ADMIN puede registrar usuarios con un rol distinto de ESTUDIANTE" | Se mandó `rol` sin token de ADMIN | Quitar `rol` (queda ESTUDIANTE) o mandar el token de un ADMIN; para el primer ADMIN ver el paso 8 |
+| Subí un usuario a ADMIN en Mongo y el Gateway le da `FORBIDDEN` | Neo4j todavía tiene el rol viejo | Reiniciar `seguridad-service` (sincroniza Mongo → Neo4j al arrancar) |
+| `allUsuarios` / `roles` dan `UNAUTHENTICATED` | Ya piden sesión (antes eran públicas) | Mandar `Authorization: Bearer <token>`; `allUsuarios` además exige ADMIN |
 | Redis rechaza la conexión | URL o contraseña | `redis://default:password123@localhost:6380` |
 | MongoDB rechaza la conexión | URI o `authSource` | Usar el perfil `local` o definir `MONGODB_URI` con `?authSource=admin` |
 | `ConstraintValidationFailed` en Neo4j | `MERGE` de patrón completo con nodos existentes | Usar `MATCH` de ambos nodos + `MERGE` de la relación |
@@ -463,7 +478,7 @@ docker compose down
 - [ ] Mismo `JWT_SECRET` en los 6 `.env`.
 - [ ] Modelo RBAC sembrado en Neo4j (6 roles, 16 rutas, 8 menús, usuarios con `HAS_ROLE`).
 - [ ] Servicios escuchando en 4000–4005.
-- [ ] `roles` responde desde el Gateway.
+- [ ] `{ __typename }` responde desde el Gateway (y `roles` con token).
 - [ ] `registrarUsuario` + `login` funcionan.
 - [ ] Una mutación protegida responde según el rol.
 

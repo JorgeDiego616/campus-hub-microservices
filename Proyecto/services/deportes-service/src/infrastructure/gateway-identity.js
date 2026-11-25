@@ -10,7 +10,7 @@ function bearerToken(authorization) {
 }
 
 /**
- * Académico solo acepta los encabezados de identidad si coinciden con un JWT
+ * Deportes (igual que académico) solo acepta los encabezados de identidad si coinciden con un JWT
  * válido. Así, llamar el subgrafo directamente con x-user-* no permite
  * suplantar a otro usuario.
  */
@@ -19,6 +19,9 @@ export function actorFromGatewayRequest(request, jwtSecret) {
   const userId = headers['x-user-id'];
   const userRole = headers['x-user-role'];
   const token = bearerToken(headers.authorization);
+  // La IP real del cliente la manda el Gateway en x-forwarded-for
+  // (gateway/src/client-info.js). Igual que en académico.
+  const ipOrigen = headers['x-forwarded-for'] || request.socket?.remoteAddress || 'UNKNOWN';
 
   if (
     typeof userId !== 'string' ||
@@ -44,9 +47,14 @@ export function actorFromGatewayRequest(request, jwtSecret) {
       return null;
     }
 
+    // Antes solo regresaba { id, rol } y los eventos de deportes llegaban a
+    // auditoría con ip_origen = null y sin saber quién los hizo.
+    // Ahora el actor trae lo mismo que en académico: ip_origen y jti.
     return {
       id: userId,
-      rol: userRole
+      rol: userRole,
+      ip_origen: ipOrigen,
+      jti: payload.jti
     };
   } catch {
     return null;

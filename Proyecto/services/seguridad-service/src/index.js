@@ -33,8 +33,18 @@ import { getDriver } from './infrastructure/database.js';
 
 import {
   Usuario,
-  ROLES_POR_DEFECTO
+  ROLES_POR_DEFECTO,
+  normalizarEmail
 } from './domain/entities.js';
+
+import {
+  rolSolicitadoEnRegistro,
+  puedeRegistrarConRol,
+  prohibido,
+  requireActor,
+  assertPuedeVerUsuario,
+  assertPuedeListarUsuarios
+} from './domain/authorization.js';
 
 import { ensureRbacConstraints } from './infrastructure/neo4j-constraints.js';
 
@@ -102,12 +112,43 @@ async function sembrarRoles() {
   console.log('🛡️ Roles por defecto verificados.');
 }
 
+// Cuando empecé a normalizar el email en registro y login, 7 usuarios viejos
+// tenían mayúsculas (ej. "Juan@test.com") y ya no habrían podido entrar.
+// Esto los pasa a minúsculas una sola vez; si ya están bien no toca nada
+// (el filtro solo agarra los que tienen mayúsculas o espacios).
+// Lo dejo al arrancar para que también se arregle si en la nube se
+// restaura un respaldo viejo.
+async function normalizarEmailsExistentes() {
+  try {
+    const resultado = await UsuarioModel.updateMany(
+      { email: { $regex: /[A-Z]|^\s|\s$/ } },
+      [{ $set: { email: { $toLower: { $trim: { input: '$email' } } } } }],
+      // Mongoose 9 no deja mandar un pipeline (el arreglo de arriba) si no
+      // se lo pides explícitamente con esta opción.
+      { updatePipeline: true }
+    );
+
+    if (resultado.modifiedCount > 0) {
+      console.log(`📧 Emails normalizados a minúsculas: ${resultado.modifiedCount}.`);
+    }
+
+  } catch (error) {
+    // Si dos usuarios solo se diferencian por mayúsculas, el índice único
+    // truena. No tiro el servicio por eso; aviso para arreglarlo a mano.
+    console.warn(
+      '⚠️ No se pudieron normalizar los emails (¿duplicados por mayúsculas?):',
+      error.message
+    );
+  }
+}
+
 // --------------------------------------------------
 // REDIS
 // --------------------------------------------------
 
-const redisUrl =
-  process.env.REDIS_URL || 'redis://localhost:6379';
+// La URL ya sale del perfil (local/docker) del runtime-config; antes caía
+// en localhost:6379 sin contraseña, que no es el Redis de nuestro compose.
+const redisUrl = runtimeConfig.redisUrl;
 
 const redisClient = createClient({
   url: redisUrl
@@ -169,7 +210,19 @@ const resolvers = {
 
   Query: {
 
-    verUsuario: async (_, { id }) => {
+    // Antes estas dos consultas no pedían token: cualquiera veía email,
+    // matrícula y rol de los 18 usuarios. El RBAC del Gateway solo revisa
+    // mutaciones, así que las queries se protegen aquí en el subgrafo
+    // (igual que hacen deportes y mapa con sus assert*).
+
+    // Cada quien ve su propio usuario; el ADMIN ve a cualquiera.
+    verUsuario: async (_, { id }, context) => {
+      assertPuedeVerUsuario(context.currentUser, id);
+
+      // Con un id mal formado Mongoose tronaba con "Cast to ObjectId failed"
+      // (y eso le enseñaba al cliente el nombre del modelo). Mejor null.
+      if (!mongoose.isValidObjectId(id)) return null;
+
       const doc = await UsuarioModel.findById(id);
 
       if (!doc) return null;
@@ -177,14 +230,21 @@ const resolvers = {
       return aDTO(doc);
     },
 
-    allUsuarios: async () => {
+    // La lista completa solo la ve el ADMIN.
+    allUsuarios: async (_, __, context) => {
+      assertPuedeListarUsuarios(context.currentUser);
+
       const docs = await UsuarioModel.find({});
 
       return docs.map(aDTO);
     },
 
-    // Lista de roles con caché en Redis (5 minutos)
-    roles: async () => {
+    // Lista de roles con caché en Redis (5 minutos).
+    // No es información sensible, pero tampoco tiene por qué ser pública:
+    // basta con tener sesión.
+    roles: async (_, __, context) => {
+      requireActor(context.currentUser);
+
       const cached = await redisClient.get('cache:roles');
 
       if (cached) {
@@ -252,18 +312,54 @@ const resolvers = {
       context
     ) => {
 
-      const rolNormalizado = rol.trim().toUpperCase();
+      // Si no mandan rol queda ESTUDIANTE (ver domain/authorization.js).
+      const rolNormalizado = rolSolicitadoEnRegistro(rol);
+
+      // Antes aquí cualquiera podía mandar rol: "ADMIN" y registrarse como
+      // administrador, porque la mutación es pública en el Gateway.
+      // Ahora otro rol que no sea ESTUDIANTE solo lo puede pedir un ADMIN
+      // logueado (el Gateway nos pasa su identidad aunque la mutación sea
+      // pública). El intento se audita igual que en crearRol.
+      if (!puedeRegistrarConRol(rolNormalizado, context.currentUser)) {
+        emitirEventoSeguridad({
+          tipo_evento: 'ASIGNACION_ROL_PERMISO',
+          usuario_id: context.currentUser?.id || null,
+          ip_origen: obtenerIp(context),
+          resultado: 'denegado',
+          severidad: 'CRITICAL',
+          motivo: 'Intento de registro con rol privilegiado sin ser ADMIN',
+          jti: context.jti,
+          operacion: 'registrarUsuario',
+          metadata: {
+            tipo_operacion: 'registrar_con_rol',
+            usuario_afectado: null,
+            rol_anterior: null,
+            nuevo_rol: rolNormalizado,
+            realizado_por: context.currentUser?.id || null,
+            rol_solicitante: context.currentUser?.rol || 'ANONIMO'
+          }
+        });
+
+        throw prohibido(
+          'Solo un ADMIN puede registrar usuarios con un rol distinto de ESTUDIANTE.'
+        );
+      }
+
+      const emailNormalizado = normalizarEmail(email);
 
       const usuarioDominio = new Usuario(
         null,
         matricula,
         nombre,
-        email,
+        emailNormalizado,
         rolNormalizado
       );
 
       usuarioDominio.validarMatricula();
+      usuarioDominio.validarNombre();
+      usuarioDominio.validarEmail();
       usuarioDominio.validarRol();
+      Usuario.validarPassword(password);
 
       const rolExiste = await RolModel.findOne({
         nombre: rolNormalizado
@@ -281,7 +377,7 @@ const resolvers = {
       const yaExiste = await UsuarioModel.findOne({
         $or: [
           { matricula },
-          { email }
+          { email: emailNormalizado }
         ]
       });
 
@@ -302,8 +398,8 @@ const resolvers = {
 
       const nuevoUsuario = new UsuarioModel({
         matricula,
-        nombre,
-        email,
+        nombre: nombre.trim(),
+        email: emailNormalizado,
         passwordHash,
         rol: rolNormalizado
       });
@@ -342,7 +438,8 @@ const resolvers = {
 
     login: async (_, { email, password }, context) => {
 
-      const doc = await UsuarioModel.findOne({ email });
+      // Busco con el email normalizado, igual que como se guarda al registrar.
+      const doc = await UsuarioModel.findOne({ email: normalizarEmail(email) });
 
       // Usuario inexistente
       if (!doc) {
@@ -828,6 +925,8 @@ async function main() {
 
   await sembrarRoles();
 
+  await normalizarEmailsExistentes();
+
   await driver.verifyConnectivity();
 
   const constraints = await ensureRbacConstraints(driver);
@@ -874,7 +973,13 @@ async function main() {
 
     context: async ({ req }) => {
 
-      const ip = req.socket?.remoteAddress || 'UNKNOWN';
+      // Antes solo usaba req.socket.remoteAddress, que es la conexión del
+      // Gateway, no la del usuario: por eso en auditoría todo salía "::1".
+      // Ahora el Gateway nos manda la IP y el user-agent reales en headers
+      // (ver gateway/src/client-info.js). Si llaman al subgrafo directo
+      // (solo en local, en la nube no está expuesto) cae al socket.
+      const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'UNKNOWN';
+      const userAgent = req.headers['x-client-user-agent'] || null;
 
       const authHeader = req.headers.authorization || '';
 
@@ -899,7 +1004,8 @@ async function main() {
                 rol: decoded.rol
               },
               jti: decoded.jti,
-              ip
+              ip,
+              userAgent
             };
           }
 
@@ -918,7 +1024,8 @@ async function main() {
       return {
         currentUser: null,
         jti: null,
-        ip
+        ip,
+        userAgent
       };
     }
   });

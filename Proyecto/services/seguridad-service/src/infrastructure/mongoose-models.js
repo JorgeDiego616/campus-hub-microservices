@@ -20,7 +20,11 @@ const UsuarioSchema = new mongoose.Schema({
   email: {
     type: String,
     required: [true, 'El email es obligatorio.'],
-    unique: true
+    unique: true,
+    // Segunda capa: aunque alguien se olvide de normalizarEmail(),
+    // Mongoose lo guarda en minúsculas y sin espacios.
+    lowercase: true,
+    trim: true
   },
   passwordHash: {
     type: String,

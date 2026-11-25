@@ -25,7 +25,9 @@ extend type Mutation {
     nombre: String!
     email: String!
     password: String!
-    rol: String!
+    # Opcional: si no se manda, el usuario queda como ESTUDIANTE.
+    # Pedir otro rol solo lo puede hacer un ADMIN con sesión activa.
+    rol: String
   ): Usuario!
 
   cambiarRolUsuario(

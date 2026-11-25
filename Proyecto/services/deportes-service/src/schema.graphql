@@ -46,3 +46,170 @@ type ReportePracticas {
 extend type Query {
   reportePracticasPorDeporte: [ReportePracticas!]!
 }
+
+# ==================================================
+# Eventos y códigos QR
+# ==================================================
+# Lo que la app Android tenía en mock (MockQrApi). Los nombres van en
+# español como el resto del esquema; el Gateway traduce al JSON snake_case
+# que espera la app (POST /qr, GET /events/{id}/capacity, etc.).
+
+enum CategoriaEvento {
+  DEPORTIVO
+  ACADEMICO
+  CULTURAL_ARTISTICA
+}
+
+# static_event_checkin / dynamic_individual_pass en la app.
+enum ModoQR {
+  EVENTO_ESTATICO
+  PASE_DINAMICO
+}
+
+# active / used / cancelled en la app ("expired" lo calcula la app).
+enum EstadoTicket {
+  ACTIVO
+  USADO
+  CANCELADO
+}
+
+type Organizador {
+  nombre: String!
+  matricula: String!
+  facultad: String!
+}
+
+type Evento {
+  id: ID!
+  titulo: String!
+  categoria: CategoriaEvento!
+  sede: String!
+  fecha: String! # AAAA-MM-DD (hora de CDMX)
+  horaInicio: String! # HH:mm
+  horaFin: String!
+  organizador: Organizador!
+  capacidad: Int!
+  lugaresDisponibles: Int!
+  # Solo lo ve quien creó el evento o un ADMIN; para los demás es null.
+  qrToken: String
+  creadoEn: String!
+}
+
+type CapacidadEvento {
+  capacidad: Int!
+  lugaresDisponibles: Int!
+}
+
+type RegistroEvento {
+  id: ID!
+  eventoId: ID!
+  nombreAsistente: String!
+  emailAsistente: String!
+  qrToken: String!
+  estado: EstadoTicket!
+  registradoEn: String!
+}
+
+type InfoQR {
+  token: String!
+  # Segundos unix. Uso Float y no Int porque Int de GraphQL es de 32 bits
+  # y se desborda en 2038. Solo viene en pases dinámicos.
+  refreshAt: Float
+}
+
+type EstadoDelTicket {
+  estado: EstadoTicket!
+  usadoEn: String
+  usadoEnPuerta: String
+}
+
+type ResumenEvento {
+  titulo: String!
+  categoria: CategoriaEvento!
+  sede: String!
+  iniciaEn: String!
+}
+
+type ResumenPortador {
+  nombre: String!
+  matricula: String!
+  facultad: String!
+}
+
+type ReglasAcceso {
+  puertaEntrada: String!
+  validoDesde: String!
+  validoHasta: String!
+}
+
+type TicketQR {
+  ticketId: ID!
+  qr: InfoQR!
+  ticket: EstadoDelTicket!
+  resumenEvento: ResumenEvento!
+  resumenPortador: ResumenPortador
+  reglasAcceso: ReglasAcceso!
+}
+
+input CrearEventoInput {
+  # El id lo genera la app (UUID), así es el mismo en los dos lados.
+  id: ID!
+  titulo: String!
+  # Acepta "deportivo", "DEPORTIVO", "Académico"...
+  categoria: String!
+  sede: String!
+  fecha: String!
+  horaInicio: String!
+  horaFin: String!
+  organizadorNombre: String!
+  organizadorMatricula: String!
+  organizadorFacultad: String
+  capacidad: Int
+}
+
+input RegistrarAsistenteInput {
+  eventoId: ID!
+  nombre: String!
+  email: String!
+}
+
+input GeofenceInput {
+  lat: Float!
+  lng: Float!
+  radioM: Int!
+}
+
+input SeguridadQRInput {
+  qrTtlSeconds: Int
+  geofence: GeofenceInput
+}
+
+input CrearQRInput {
+  eventoId: ID!
+  modo: ModoQR!
+  # Obligatorio solo en PASE_DINAMICO.
+  usuarioId: ID
+  validoDesde: String!
+  validoHasta: String!
+  seguridad: SeguridadQRInput
+  # Si el evento no existe todavía, se crea con estos datos.
+  eventoTitulo: String
+  eventoCategoria: String
+  eventoSede: String
+  portadorNombre: String!
+  portadorMatricula: String!
+  portadorFacultad: String
+}
+
+extend type Query {
+  eventos: [Evento!]!
+  evento(id: ID!): Evento
+  capacidadDeEvento(eventoId: ID!): CapacidadEvento!
+  registrosDeEvento(eventoId: ID!): [RegistroEvento!]!
+}
+
+extend type Mutation {
+  crearEvento(input: CrearEventoInput!): Evento!
+  registrarAsistente(input: RegistrarAsistenteInput!): RegistroEvento!
+  crearQR(input: CrearQRInput!): TicketQR!
+}

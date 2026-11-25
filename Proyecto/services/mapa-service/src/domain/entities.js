@@ -1,3 +1,8 @@
+import { ErrorDeDominio } from './errors.js';
+
+// Las reglas de negocio lanzan ErrorDeDominio (antes new Error) para que
+// lleguen al cliente como BAD_USER_INPUT y no como error interno.
+
 export const TIPOS_ESPACIO = Object.freeze({
   CANCHA: 'CANCHA',
   GIMNASIO: 'GIMNASIO',
@@ -20,19 +25,19 @@ export class Espacio {
     activo = true
   ) {
     if (!nombre?.trim()) {
-      throw new Error('El nombre del espacio es obligatorio.');
+      throw new ErrorDeDominio('El nombre del espacio es obligatorio.');
     }
 
     if (!Object.values(TIPOS_ESPACIO).includes(tipo)) {
-      throw new Error('El tipo de espacio no es válido.');
+      throw new ErrorDeDominio('El tipo de espacio no es válido.');
     }
 
     if (!edificio?.trim()) {
-      throw new Error('El edificio es obligatorio.');
+      throw new ErrorDeDominio('El edificio es obligatorio.');
     }
 
     if (!Number.isInteger(piso)) {
-      throw new Error('El piso debe ser un número entero.');
+      throw new ErrorDeDominio('El piso debe ser un número entero.');
     }
 
     if (coordenadas !== null) {
@@ -40,7 +45,7 @@ export class Espacio {
         typeof coordenadas.latitud !== 'number' ||
         typeof coordenadas.longitud !== 'number'
       ) {
-        throw new Error('Las coordenadas deben contener latitud y longitud numéricas.');
+        throw new ErrorDeDominio('Las coordenadas deben contener latitud y longitud numéricas.');
       }
     }
 
@@ -56,7 +61,7 @@ export class Espacio {
 
   validarDisponible() {
     if (!this.activo) {
-      throw new Error('El espacio no está disponible para nuevas asignaciones.');
+      throw new ErrorDeDominio('El espacio no está disponible para nuevas asignaciones.');
     }
   }
 

@@ -3,6 +3,12 @@ import {
   HorarioModel, HorasBecariasModel, HorasComplementariasModel, InscripcionModel, MateriaModel,
   PerfilAcademicoModel, PeriodoModel
 } from './mongoose-models.js';
+import mongoose from 'mongoose';
+import { RecursoNoEncontrado } from '../domain/errors.js'; // antes: new Error -> salía como 500
+
+// Si el id viene mal formado (ej. "xx"), Mongoose truena con "Cast to ObjectId"
+// y sale como error interno. Lo trato igual que "no existe" (NOT_FOUND).
+const idValido = (id) => mongoose.isValidObjectId(id);
 
 function dto(document) {
   if (!document) return null;
@@ -16,7 +22,7 @@ function collectionRepository(Model) {
     async create(data) { return dto(await Model.create(data)); },
     async findAll() { return (await Model.find({}).sort({ createdAt: -1 })).map(dto); },
     async findByIds(ids) { return (await Model.find({ _id: { $in: ids } })).map(dto); },
-    async requireById(id) { const document = await Model.findById(id); if (!document) throw new Error('El recurso solicitado no existe.'); return dto(document); }
+    async requireById(id) { const document = (idValido(id) ? await Model.findById(id) : null); if (!document) throw new RecursoNoEncontrado('El recurso solicitado no existe.'); return dto(document); }
   };
 }
 
@@ -34,7 +40,7 @@ export function createMongooseRepositories() {
     },
     asignaciones: {
       async create(data) { return dto(await AsignacionMateriaModel.create(data)); },
-      async requireById(id) { const document = await AsignacionMateriaModel.findById(id); if (!document) throw new Error('La asignación solicitada no existe.'); return dto(document); },
+      async requireById(id) { const document = (idValido(id) ? await AsignacionMateriaModel.findById(id) : null); if (!document) throw new RecursoNoEncontrado('La asignación solicitada no existe.'); return dto(document); },
       async findAll(periodoId) { return (await AsignacionMateriaModel.find(periodoId ? { periodoId } : {}).sort({ grupo: 1 })).map(dto); },
       async findByProfessor(profesorId, periodoId) { return (await AsignacionMateriaModel.find({ profesorId, ...(periodoId ? { periodoId } : {}) }).sort({ grupo: 1 })).map(dto); },
       async findByStudent(alumnoId, periodoId) { const enrollments = await InscripcionModel.find({ alumnoId }); const ids = enrollments.map(({ asignacionMateriaId }) => asignacionMateriaId); return (await AsignacionMateriaModel.find({ _id: { $in: ids }, ...(periodoId ? { periodoId } : {}) })).map(dto); }
@@ -48,7 +54,7 @@ export function createMongooseRepositories() {
         const assignments = await AsignacionMateriaModel.find({ profesorId }).select('_id');
         return (await InscripcionModel.find({ alumnoId, asignacionMateriaId: { $in: assignments.map(({ _id }) => _id) } }).sort({ createdAt: -1 })).map(dto);
       },
-      async requireById(id) { const document = await InscripcionModel.findById(id); if (!document) throw new Error('La inscripción solicitada no existe.'); return dto(document); }
+      async requireById(id) { const document = (idValido(id) ? await InscripcionModel.findById(id) : null); if (!document) throw new RecursoNoEncontrado('La inscripción solicitada no existe.'); return dto(document); }
     },
     calificaciones: { async create(data) { return dto(await CalificacionModel.create(data)); }, async findByInscripcion(inscripcionId) { return (await CalificacionModel.find({ inscripcionId }).sort({ fechaRegistro: -1 })).map(dto); } },
     faltas: { async create(data) { return dto(await FaltaModel.create(data)); }, async findByInscripcion(inscripcionId) { return (await FaltaModel.find({ inscripcionId }).sort({ fecha: -1 })).map(dto); } },
@@ -57,9 +63,9 @@ export function createMongooseRepositories() {
     horasComplementarias: { async create(data) { return dto(await HorasComplementariasModel.create(data)); } },
     horarios: {
       async create(data) { return dto(await HorarioModel.create(data)); },
-      async requireById(id) { const document = await HorarioModel.findById(id); if (!document) throw new Error('La sesión de horario solicitada no existe.'); return dto(document); },
-      async update(id, data) { const document = await HorarioModel.findByIdAndUpdate(id, data, { returnDocument: 'after', runValidators: true }); if (!document) throw new Error('La sesión de horario solicitada no existe.'); return dto(document); },
-      async delete(id) { const document = await HorarioModel.findByIdAndDelete(id); if (!document) throw new Error('La sesión de horario solicitada no existe.'); return dto(document); },
+      async requireById(id) { const document = (idValido(id) ? await HorarioModel.findById(id) : null); if (!document) throw new RecursoNoEncontrado('La sesión de horario solicitada no existe.'); return dto(document); },
+      async update(id, data) { const document = (idValido(id) ? await HorarioModel.findByIdAndUpdate(id, data, { returnDocument: 'after', runValidators: true }) : null); if (!document) throw new RecursoNoEncontrado('La sesión de horario solicitada no existe.'); return dto(document); },
+      async delete(id) { const document = (idValido(id) ? await HorarioModel.findByIdAndDelete(id) : null); if (!document) throw new RecursoNoEncontrado('La sesión de horario solicitada no existe.'); return dto(document); },
       async findByAsignaciones(asignacionIds) { return (await HorarioModel.find({ asignacionMateriaId: { $in: asignacionIds } }).sort({ diaSemana: 1, horaInicio: 1 })).map(dto); },
       async findOverlapping({ asignacionIds, diaSemana, horaInicio, horaFin, aula, excludeId }) {
         const filter = { asignacionMateriaId: { $in: asignacionIds }, diaSemana, horaInicio: { $lt: horaFin }, horaFin: { $gt: horaInicio } };

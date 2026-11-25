@@ -6,7 +6,7 @@
    docker compose -f Docker/docker-compose.yml up -d mongodb redis-stack rabbitmq
    ```
 
-2. En `Proyecto/node_modules-v2/services/mapa-service`, instala y arranca el servicio:
+2. En `Proyecto/services/mapa-service`, instala y arranca el servicio:
 
    ```powershell
    npm install

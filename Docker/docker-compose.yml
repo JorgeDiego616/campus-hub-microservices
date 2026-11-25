@@ -1,4 +1,11 @@
-version: '3.8'
+# Quité "version: '3.8'": Docker Compose v2 ya no lo usa y solo sacaba un warning.
+#
+# Contraseñas: ahora salen de variables ${VAR:-default}. Si no hay un .env en
+# esta carpeta (Docker/) se usan los mismos valores de siempre (password123,
+# guest...), así que en local todo sigue igual. En la nube copio .env.example
+# a .env y pongo contraseñas de verdad, sin tocar este archivo.
+# OJO: Mongo, Neo4j y Rabbit solo leen estas contraseñas la PRIMERA vez que
+# se crea su volumen; cambiarlas después no cambia la contraseña ya guardada.
 
 services:
   # =========================================================================
@@ -10,8 +17,8 @@ services:
     ports:
       - "27018:27017"                            # antes: 27017:27017
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
     volumes:
       - ulsa_mongodb_data:/data/db         # antes: mongodb_data
     networks:
@@ -21,13 +28,16 @@ services:
   # 2. CAPA DE VELOCIDAD, CACHÉ Y ESTADO: REDIS STACK
   # =========================================================================
   redis-stack:
-    image: redis/redis-stack:latest
+    # Antes era :latest. Lo fijé a 7.4.0-v8 porque es EXACTAMENTE la imagen que
+    # ya tenía (mismo digest, Redis 7.4.7). Con :latest, en la nube podría bajar
+    # otra versión distinta y no leer bien mi dump.rdb.
+    image: redis/redis-stack:7.4.0-v8
     container_name: ulsa-redis-stack       # antes: bda-redis-stack
     ports:
       - "6380:6379"                               # antes: 6379:6379
       - "8002:8001"                               # antes: 8001:8001
     environment:
-      REDIS_ARGS: "--requirepass password123"
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD:-password123}"
     volumes:
       - ulsa_redis_data:/data              # antes: redis_data
     networks:
@@ -43,7 +53,7 @@ services:
       - "7475:7474"                               # antes: 7474:7474
       - "7688:7687"                               # antes: 7687:7687
     environment:
-      NEO4J_AUTH: "neo4j/password123"
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-password123}"
       NEO4J_PLUGINS: '["apoc"]'
     volumes:
       - ulsa_neo4j_data:/data
@@ -73,12 +83,19 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: ulsa-rabbitmq          # antes: bda-rabbitmq
+    # OJO: RabbitMQ guarda todo (colas, usuarios, mensajes) en una carpeta
+    # llamada rabbit@<hostname> dentro del volumen. Si no fijo el hostname,
+    # Docker le pone el ID del contenedor (cambia cada vez que lo recreo) y
+    # Rabbit arranca "vacío" aunque el volumen siga ahí. Por eso ya tenía
+    # 3 carpetas rabbit@<id> distintas. Con un hostname fijo siempre usa
+    # la misma: rabbit@rabbitmq, aquí y en la nube.
+    hostname: rabbitmq
     ports:
       - "5673:5672"                               # antes: 5672:5672
       - "15673:15672"                              # antes: 15672:15672
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     volumes:
       - ulsa_rabbitmq_data:/var/lib/rabbitmq
     networks:

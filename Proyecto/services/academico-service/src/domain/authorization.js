@@ -16,7 +16,9 @@ function unauthenticated(message) {
   });
 }
 
-function forbidden(message) {
+// La exporto porque los casos de uso también necesitan lanzar 403
+// (antes ahí usaban new Error y salía como 500).
+export function forbidden(message) {
   return new GraphQLError(message, {
     extensions: { code: 'FORBIDDEN', http: { status: 403 } }
   });
